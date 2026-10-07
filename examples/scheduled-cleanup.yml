@@ -1,0 +1,40 @@
+# Weekly: untag stale tags on Mondays, sweep untagged manifests on Thursdays.
+# Start with the default (plan, dry run) and only turn dry-run off after two clean reports.
+name: ACR cleanup
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'
+    - cron: '0 3 * * 4'
+  workflow_dispatch:
+    inputs:
+      operation:
+        type: choice
+        default: plan
+        options: [plan, untag-stale-tags, sweep-untagged-manifests]
+      dry-run:
+        type: choice
+        default: 'true'
+        options: ['true', 'false']
+
+permissions:
+  id-token: write   # azure/login OIDC
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: Optym/acr-cleanup-strategy@v1
+        with:
+          config: config/acr-cleanup.yaml
+          operation: ${{ inputs.operation || (github.event.schedule == '0 3 * * 1' && 'untag-stale-tags' || 'sweep-untagged-manifests') }}
+          dry-run: ${{ inputs.dry-run || 'true' }}

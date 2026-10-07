@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ShellCheck
+        run: shellcheck -x -S warning acr-cleanup/acr-cleanup.sh acr-cleanup/lib/*.sh acr-cleanup/tools/*.sh acr-cleanup/deploy/*.sh
+      - name: Unit tests
+        working-directory: acr-cleanup
+        run: for t in tests/*.test.sh; do bash "$t"; done
+      - name: Validate example config
+        working-directory: acr-cleanup
+        run: ./acr-cleanup.sh --config config/example.yaml --operation validate-config

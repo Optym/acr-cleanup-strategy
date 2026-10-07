@@ -1,0 +1,181 @@
+name: 'ACR Cleanup'
+description: 'Safe, config-driven Azure Container Registry cleanup that protects every image still running in Kubernetes.'
+author: 'Optym'
+
+branding:
+  icon: 'trash-2'
+  color: 'blue'
+
+inputs:
+  config:
+    description: 'Path to the cleanup config YAML, relative to the workspace. See acr-cleanup/config/example.yaml.'
+    required: true
+  operation:
+    description: >-
+      validate-config | discover | inventory | plan | untag-stale-tags |
+      sweep-untagged-manifests | untag-and-sweep. Defaults to plan, which is read-only.
+    required: false
+    default: 'plan'
+  dry-run:
+    description: >-
+      'true' forces a dry run, 'false' allows real deletions, 'config' defers to
+      run_settings.dry_run in the config file. Defaults to true so adopting the action
+      can never delete anything by accident.
+    required: false
+    default: 'true'
+  work-dir:
+    description: 'Directory for stage output and reports, relative to the workspace.'
+    required: false
+    default: '.acr-cleanup-work'
+  previous-dir:
+    description: 'Directory holding the previous run result.json and lock-ledger.json (for the delta and the unlock wait).'
+    required: false
+    default: ''
+  repositories:
+    description: 'Comma-separated repositories to limit the run to. Discovery still reads every cluster.'
+    required: false
+    default: ''
+  tag-groups:
+    description: 'Comma-separated tag_group names to limit the run to.'
+    required: false
+    default: ''
+  validate-after:
+    description: "'true' to confirm every running image is still pullable after execute."
+    required: false
+    default: 'false'
+  set:
+    description: 'Newline-separated config overrides, each path=value (e.g. run_settings.max_deletions_per_run=5000).'
+    required: false
+    default: ''
+  extra-args:
+    description: 'Additional raw arguments passed to acr-cleanup.sh.'
+    required: false
+    default: ''
+  upload-report:
+    description: "'true' to upload the work directory (reports and JSON) as a workflow artifact."
+    required: false
+    default: 'true'
+  artifact-name:
+    description: 'Name of the uploaded report artifact.'
+    required: false
+    default: 'acr-cleanup-report'
+  sendgrid-api-key:
+    description: 'SendGrid API key for email_report. Pass a secret. Exported to the variable named by email_report.api_key_variable.'
+    required: false
+    default: ''
+
+outputs:
+  status:
+    description: 'Run status from result.json (.run.status).'
+    value: ${{ steps.summary.outputs.status }}
+  deleted-count:
+    description: 'Number of items deleted in this run.'
+    value: ${{ steps.summary.outputs.deleted-count }}
+  untag-candidates:
+    description: 'Number of tags that are candidates to untag.'
+    value: ${{ steps.summary.outputs.untag-candidates }}
+  manifest-candidates:
+    description: 'Number of untagged manifests that are candidates to sweep.'
+    value: ${{ steps.summary.outputs.manifest-candidates }}
+  work-dir:
+    description: 'Absolute path of the work directory.'
+    value: ${{ steps.run.outputs.work-dir }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Check prerequisites
+      shell: bash
+      run: |
+        missing=()
+        for tool in az jq; do command -v "$tool" >/dev/null 2>&1 || missing+=("$tool"); done
+        command -v yq >/dev/null 2>&1 || command -v python3 >/dev/null 2>&1 || missing+=("yq or python3")
+        if ((${#missing[@]})); then
+          echo "::error::missing required tool(s): ${missing[*]}. Use ubuntu-latest, or install them first."
+          exit 1
+        fi
+        if ! az account show >/dev/null 2>&1; then
+          echo "::error::not logged in to Azure. Run azure/login before this action."
+          exit 1
+        fi
+
+    - name: Run acr-cleanup
+      id: run
+      shell: bash
+      env:
+        INPUT_CONFIG: ${{ inputs.config }}
+        INPUT_OPERATION: ${{ inputs.operation }}
+        INPUT_DRY_RUN: ${{ inputs.dry-run }}
+        INPUT_WORK_DIR: ${{ inputs.work-dir }}
+        INPUT_PREVIOUS_DIR: ${{ inputs.previous-dir }}
+        INPUT_REPOSITORIES: ${{ inputs.repositories }}
+        INPUT_TAG_GROUPS: ${{ inputs.tag-groups }}
+        INPUT_VALIDATE_AFTER: ${{ inputs.validate-after }}
+        INPUT_SET: ${{ inputs.set }}
+        INPUT_EXTRA_ARGS: ${{ inputs.extra-args }}
+        SENDGRID_API_KEY: ${{ inputs.sendgrid-api-key }}
+      run: |
+        set -euo pipefail
+        # Inputs reach the script only through env vars, never interpolated into the shell text.
+        args=(--config "$INPUT_CONFIG" --operation "$INPUT_OPERATION" --work-dir "$INPUT_WORK_DIR")
+
+        case "$INPUT_DRY_RUN" in
+          true)   args+=(--dry-run) ;;
+          false)  args+=(--no-dry-run) ;;
+          config) ;;
+          *) echo "::error::dry-run must be true, false or config (got '$INPUT_DRY_RUN')"; exit 1 ;;
+        esac
+
+        [[ -z "$INPUT_PREVIOUS_DIR" ]]  || args+=(--previous-dir "$INPUT_PREVIOUS_DIR")
+        [[ -z "$INPUT_REPOSITORIES" ]]  || args+=(--repositories "$INPUT_REPOSITORIES")
+        [[ -z "$INPUT_TAG_GROUPS" ]]    || args+=(--tag-groups "$INPUT_TAG_GROUPS")
+        [[ "$INPUT_VALIDATE_AFTER" != "true" ]] || args+=(--validate-after)
+
+        while IFS= read -r line; do
+          line="${line#"${line%%[![:space:]]*}"}"
+          [[ -n "$line" ]] && args+=(--set "$line")
+        done <<<"$INPUT_SET"
+
+        if [[ -n "$INPUT_EXTRA_ARGS" ]]; then
+          read -r -a extra <<<"$INPUT_EXTRA_ARGS"
+          args+=("${extra[@]}")
+        fi
+
+        echo "work-dir=$(cd "$(dirname "$INPUT_WORK_DIR")" 2>/dev/null && pwd)/$(basename "$INPUT_WORK_DIR")" >> "$GITHUB_OUTPUT"
+
+        # Exit code is propagated, but the summary and artifact steps still run (if: always()).
+        "${GITHUB_ACTION_PATH}/acr-cleanup/acr-cleanup.sh" "${args[@]}"
+
+    - name: Summarise result
+      id: summary
+      if: always()
+      shell: bash
+      env:
+        INPUT_WORK_DIR: ${{ inputs.work-dir }}
+      run: |
+        result="${INPUT_WORK_DIR}/result.json"
+        if [[ ! -f "$result" ]]; then
+          echo "status=no-result" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        {
+          echo "status=$(jq -r '.run.status // "unknown"' "$result")"
+          echo "deleted-count=$(jq -r '.deleted.count // 0' "$result")"
+          echo "untag-candidates=$(jq -r '.candidates.untag // 0' "$result")"
+          echo "manifest-candidates=$(jq -r '.candidates.manifests // 0' "$result")"
+        } >> "$GITHUB_OUTPUT"
+        {
+          echo "### ACR cleanup"
+          jq -r '"- registry: `\(.run.registry)`\n- operation: `\(.run.operation)`\(if .run.dry_run then " (dry run)" else "" end)\n- status: **\(.run.status)**\n- deleted: \(.deleted.count)\n- untag candidates: \(.candidates.untag)\n- sweep candidates: \(.candidates.manifests)"' "$result"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload report
+      if: always() && inputs.upload-report == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: |
+          ${{ inputs.work-dir }}/result.json
+          ${{ inputs.work-dir }}/lock-ledger.json
+          ${{ inputs.work-dir }}/report-*.html
+        if-no-files-found: ignore

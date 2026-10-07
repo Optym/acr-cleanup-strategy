@@ -1,0 +1,28 @@
+name: Release
+
+# Push a semver tag (v1.2.3). This creates the GitHub release and moves the
+# floating major tag (v1) so consumers using @v1 pick the release up.
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        working-directory: acr-cleanup
+        run: for t in tests/*.test.sh; do bash "$t"; done
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --generate-notes --title "$GITHUB_REF_NAME"
+      - name: Move major tag
+        run: |
+          major="${GITHUB_REF_NAME%%.*}"
+          git tag -f "$major"
+          git push -f origin "refs/tags/$major"
