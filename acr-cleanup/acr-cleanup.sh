@@ -100,30 +100,30 @@ Config precedence, lowest to highest:
 
 Examples:
   # validate config only, touches no Azure resources
-  ./acr-cleanup.sh --config config/routemax.yaml --operation validate-config
+  ./acr-cleanup.sh --config config/myproduct.yaml --operation validate-config
 
   # build the protection set from every cluster (read-only)
-  ./acr-cleanup.sh --config config/routemax.yaml --operation discover
+  ./acr-cleanup.sh --config config/myproduct.yaml --operation discover
 
   # one cluster only, as the pipeline runs it
-  ./acr-cleanup.sh --config config/routemax.yaml --operation discover \
-    --cluster rmx-aks-np-eus-c1
+  ./acr-cleanup.sh --config config/myproduct.yaml --operation discover \
+    --cluster my-aks-np-c1
 
   # read the registry inventory (read-only)
-  ./acr-cleanup.sh --config config/routemax.yaml --operation inventory
+  ./acr-cleanup.sh --config config/myproduct.yaml --operation inventory
 
   # plan a run and inspect the candidates and the report
-  ./acr-cleanup.sh --config config/routemax.yaml --operation plan
+  ./acr-cleanup.sh --config config/myproduct.yaml --operation plan
 
   # real run, PR builds only, capped
-  ./acr-cleanup.sh --config config/routemax.yaml --operation untag-stale-tags --no-dry-run \
+  ./acr-cleanup.sh --config config/myproduct.yaml --operation untag-stale-tags --no-dry-run \
     --tag-groups pull_request_builds --set run_settings.max_deletions_per_run=5000
 
   # targeted: two repositories only, plan first, then untag
-  ./acr-cleanup.sh --config config/routemax.yaml --operation plan \
-    --repositories routemax/ui,routemax/tsp
-  ./acr-cleanup.sh --config config/routemax.yaml --operation untag-stale-tags --no-dry-run \
-    --repositories routemax/ui,routemax/tsp --skip-discover
+  ./acr-cleanup.sh --config config/myproduct.yaml --operation plan \
+    --repositories myproduct/ui,myproduct/tsp
+  ./acr-cleanup.sh --config config/myproduct.yaml --operation untag-stale-tags --no-dry-run \
+    --repositories myproduct/ui,myproduct/tsp --skip-discover
 USAGE
 }
 

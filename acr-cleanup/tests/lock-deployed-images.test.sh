@@ -34,7 +34,7 @@ check_equals() {
 
 cat > "${TMP_ROOT}/config.yaml" <<'YAML'
 registry:
-  name: rmxacrcommon
+  name: myregistry
   resource_group: immortal-rg-eus
   subscription_id: 00000000-0000-0000-0000-000000000000
 image_cleanup_rules:
@@ -66,22 +66,22 @@ spec:
     spec:
       containers:
         - name: api
-          image: "rmxacrcommon.azurecr.io/routemax/api:5.5.0-beta.1-136"
+          image: "myregistry.azurecr.io/myproduct/api:5.5.0-beta.1-136"
         - name: ui
-          image: rmxacrcommon.azurecr.io/routemax/ui:5.5.0-beta.1-136
+          image: myregistry.azurecr.io/myproduct/ui:5.5.0-beta.1-136
         - name: api-again
-          image: "rmxacrcommon.azurecr.io/routemax/api:5.5.0-beta.1-136"
+          image: "myregistry.azurecr.io/myproduct/api:5.5.0-beta.1-136"
         - name: keda
           image: ghcr.io/kedacore/keda:2.14.0
         - name: pinned
-          image: rmxacrcommon.azurecr.io/routemax/osrm@sha256:abc
+          image: myregistry.azurecr.io/myproduct/osrm@sha256:abc
 YAML
 
 CALLS="${TMP_ROOT}/calls"
 : > "$CALLS"
 
 # Stubs. acr_request answers the tag read (with digest) and the manifest read.
-acr_init() { printf 'init\n' >> "$CALLS"; ACR_LOGIN_SERVER="rmxacrcommon.azurecr.io"; }
+acr_init() { printf 'init\n' >> "$CALLS"; ACR_LOGIN_SERVER="myregistry.azurecr.io"; }
 acr_request() {
   local path="$2"
   printf 'GET %s\n' "$path" >> "$CALLS"
@@ -109,7 +109,7 @@ echo "lock-deployed-images: image extraction"
 IMAGES="$(lock_images_from_manifest < "${TMP_ROOT}/manifest.yaml")"
 check_equals "our tagged images are collected, deduplicated" "2" "$(jq 'length' <<<"$IMAGES")"
 check_equals "third-party images are ignored" "0" "$(jq '[ .[] | select(.repository | test("keda")) ] | length' <<<"$IMAGES")"
-check_equals "digest-pinned references are left alone" "0" "$(jq '[ .[] | select(.repository == "routemax/osrm") ] | length' <<<"$IMAGES")"
+check_equals "digest-pinned references are left alone" "0" "$(jq '[ .[] | select(.repository == "myproduct/osrm") ] | length' <<<"$IMAGES")"
 
 echo "lock-deployed-images: locking"
 : > "$CALLS"
@@ -117,9 +117,9 @@ run_lock --config "${TMP_ROOT}/config.yaml" --environment MPROD-01 --manifest-fi
 check_equals "lock run succeeds" "0" "$RC"
 check_equals "one ACR login per run" "1" "$(grep -c '^init$' "$CALLS")"
 check_equals "each tag is locked for delete only, write untouched" \
-  "2" "$(grep -c '^PATCH tag routemax/[a-z]* 5.5.0-beta.1-136 write=true delete=false$' "$CALLS")"
+  "2" "$(grep -c '^PATCH tag myproduct/[a-z]* 5.5.0-beta.1-136 write=true delete=false$' "$CALLS")"
 check_equals "each manifest is locked too" \
-  "2" "$(grep -c '^PATCH manifest routemax/[a-z]* sha256:d1 write=true delete=false$' "$CALLS")"
+  "2" "$(grep -c '^PATCH manifest myproduct/[a-z]* sha256:d1 write=true delete=false$' "$CALLS")"
 
 : > "$CALLS"
 run_lock --config "${TMP_ROOT}/config.yaml" --environment SEFL-DEV-01 --manifest-file "${TMP_ROOT}/manifest.yaml" --work-dir "${TMP_ROOT}/w2"; RC=$?
@@ -144,11 +144,11 @@ run_lock --config "${TMP_ROOT}/config.yaml" --environment MPROD-01 --manifest-fi
 check_equals "already-locked images exit 0" "0" "$RC"
 check_equals "already-locked images are not patched again" "0" "$(grep -c '^PATCH' "$CALLS")"
 
-sed 's/routemax\/api:5.5.0-beta.1-136/routemax\/api:missing-1/' "${TMP_ROOT}/manifest.yaml" > "${TMP_ROOT}/manifest-missing.yaml"
+sed 's/myproduct\/api:5.5.0-beta.1-136/myproduct\/api:missing-1/' "${TMP_ROOT}/manifest.yaml" > "${TMP_ROOT}/manifest-missing.yaml"
 : > "$CALLS"
 run_lock --config "${TMP_ROOT}/config.yaml" --environment MPROD-01 --manifest-file "${TMP_ROOT}/manifest-missing.yaml" --work-dir "${TMP_ROOT}/w6"; RC=$?
 check_equals "a tag missing from the registry gives exit 2" "2" "$RC"
-check_equals "the other image is still locked" "1" "$(grep -c '^PATCH tag routemax/ui' "$CALLS")"
+check_equals "the other image is still locked" "1" "$(grep -c '^PATCH tag myproduct/ui' "$CALLS")"
 
 if run_lock --config "${TMP_ROOT}/config.yaml" --environment MPROD-01 --work-dir "${TMP_ROOT}/w7"; then
   fail_test "missing manifest source is a usage error"

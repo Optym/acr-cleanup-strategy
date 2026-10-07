@@ -97,7 +97,7 @@ manifest() {   # digest age_days tags_json [locked] [references_json] [media_typ
        references: $refs, write_enabled: true, delete_enabled: $e }'
 }
 
-# routemax/api: the main scenario repository.
+# myproduct/api: the main scenario repository.
 API_TAGS="$(jq -s '.' <<EOJ
 $(tag "5.6.0-PullRequest1.1"  sha256:pr1  1)
 $(tag "5.6.0-PullRequest2.1"  sha256:pr2  3)
@@ -148,9 +148,9 @@ jq -n \
   '{
      generated_at: "2026-09-04T00:00:00Z", registry: "testacr",
      repositories: [
-       { repository: "routemax/api", tags: $api_tags, manifests: $api_manifests },
+       { repository: "myproduct/api", tags: $api_tags, manifests: $api_manifests },
        { repository: "tools/kubectl", tags: $tool_tags, manifests: $tool_manifests },
-       { repository: "routemax/quiet", tags: $quiet_tags, manifests: $quiet_manifests }
+       { repository: "myproduct/quiet", tags: $quiet_tags, manifests: $quiet_manifests }
      ],
      totals: {}
    }' > "${WORK}/inventory.json"
@@ -160,15 +160,15 @@ cat > "${WORK}/protection-set.json" <<'JSON'
   "generated_at": "2026-09-04T00:00:00Z",
   "registry": "testacr",
   "clusters": [ { "cluster": "test-aks", "status": "ok", "required": true, "entry_count": 3 } ],
-  "protected_tags": [ { "repository": "routemax/api", "tag": "5.5.0-beta.1-136" },
-                      { "repository": "routemax/api", "tag": "5.4.0-beta.1-99" } ],
-  "protected_digests": [ { "repository": "routemax/api", "digest": "sha256:deployed" },
-                         { "repository": "routemax/api", "digest": "sha256:orphan-running" } ],
+  "protected_tags": [ { "repository": "myproduct/api", "tag": "5.5.0-beta.1-136" },
+                      { "repository": "myproduct/api", "tag": "5.4.0-beta.1-99" } ],
+  "protected_digests": [ { "repository": "myproduct/api", "digest": "sha256:deployed" },
+                         { "repository": "myproduct/api", "digest": "sha256:orphan-running" } ],
   "sources": [
-    { "repository": "routemax/api", "tag": "5.5.0-beta.1-136", "cluster": "test-aks", "source": "pod", "detail": "running" },
-    { "repository": "routemax/api", "digest": "sha256:deployed", "cluster": "test-aks", "source": "pod", "detail": "running" },
-    { "repository": "routemax/api", "digest": "sha256:orphan-running", "cluster": "test-aks", "source": "pod", "detail": "running" },
-    { "repository": "routemax/api", "tag": "5.4.0-beta.1-99", "cluster": "test-aks", "source": "helm-history", "detail": "ns/rel@rev2" }
+    { "repository": "myproduct/api", "tag": "5.5.0-beta.1-136", "cluster": "test-aks", "source": "pod", "detail": "running" },
+    { "repository": "myproduct/api", "digest": "sha256:deployed", "cluster": "test-aks", "source": "pod", "detail": "running" },
+    { "repository": "myproduct/api", "digest": "sha256:orphan-running", "cluster": "test-aks", "source": "pod", "detail": "running" },
+    { "repository": "myproduct/api", "tag": "5.4.0-beta.1-99", "cluster": "test-aks", "source": "helm-history", "detail": "ns/rel@rev2" }
   ],
   "suspect_hosts": [], "unlisted_clusters": []
 }
@@ -191,30 +191,30 @@ echo "classify: never_delete"
 check_equals "never_delete repository" "never-delete:repository" "$(reason_of tools/kubectl 1.31.8)"
 check_equals "never_delete repository is flagged on the repo row" \
   "true" "$(jq -r '.repositories[] | select(.repository == "tools/kubectl") | .never_delete' "${WORK}/plan.json")"
-check_equals "latest is never deleted" "never-delete:pattern" "$(reason_of routemax/api latest)"
-check_equals "-donotdelete escape hatch" "never-delete:pattern" "$(reason_of routemax/api 5.2.0-beta.1-1-donotdelete)"
+check_equals "latest is never deleted" "never-delete:pattern" "$(reason_of myproduct/api latest)"
+check_equals "-donotdelete escape hatch" "never-delete:pattern" "$(reason_of myproduct/api 5.2.0-beta.1-1-donotdelete)"
 check_equals "never_delete wins over everything, even a matching rule" \
-  "never-delete:pattern" "$(reason_of routemax/api 5.2.0-beta.1-1-donotdelete)"
+  "never-delete:pattern" "$(reason_of myproduct/api 5.2.0-beta.1-1-donotdelete)"
 
 echo "classify: rules"
-check_equals "plain release tag matches no rule" "no-matching-rule" "$(reason_of routemax/api 5.3.0)"
-check_equals "digit-leading branch tag matches no rule" "no-matching-rule" "$(reason_of routemax/api 2be4aca5-revert.1-3)"
+check_equals "plain release tag matches no rule" "no-matching-rule" "$(reason_of myproduct/api 5.3.0)"
+check_equals "digit-leading branch tag matches no rule" "no-matching-rule" "$(reason_of myproduct/api 2be4aca5-revert.1-3)"
 check_equals "inUse marker is claimed by the first rule, not release_builds" \
   "legacy_inuse_markers" "$(jq -r '.untag[] | select(.tag == "5.4.0-beta.1-100-qa-inUse") | .tag_group' "${WORK}/plan.json")"
 
 echo "classify: protection"
-check_equals "running tag is protected" "protected" "$(reason_of routemax/api 5.5.0-beta.1-136)"
-check_equals "protection detail names the cluster" "protected:cluster=test-aks" "$(detail_of routemax/api 5.5.0-beta.1-136)"
-check_equals "helm history protects the rollback target" "protected:helm-history" "$(detail_of routemax/api 5.4.0-beta.1-99)"
+check_equals "running tag is protected" "protected" "$(reason_of myproduct/api 5.5.0-beta.1-136)"
+check_equals "protection detail names the cluster" "protected:cluster=test-aks" "$(detail_of myproduct/api 5.5.0-beta.1-136)"
+check_equals "helm history protects the rollback target" "protected:helm-history" "$(detail_of myproduct/api 5.4.0-beta.1-99)"
 check_equals "a second tag on a running digest is protected by digest" \
-  "protected" "$(reason_of routemax/api 5.6.0-PullRequest8.1)"
+  "protected" "$(reason_of myproduct/api 5.6.0-PullRequest8.1)"
 check_equals "inUse marker on a running digest is protected by digest" \
-  "protected" "$(reason_of routemax/api 5.5.0-beta.1-136-prod-inUse)"
+  "protected" "$(reason_of myproduct/api 5.5.0-beta.1-136-prod-inUse)"
 check_equals "protection is reported before age, so a deployed old image says protected" \
-  "protected" "$(reason_of routemax/api 5.5.0-beta.1-136)"
+  "protected" "$(reason_of myproduct/api 5.5.0-beta.1-136)"
 
 echo "classify: locks"
-check_equals "locked tag is skipped, never unlocked here" "locked" "$(reason_of routemax/api 5.6.0-PullRequest7.1)"
+check_equals "locked tag is skipped, never unlocked here" "locked" "$(reason_of myproduct/api 5.6.0-PullRequest7.1)"
 check_equals "lock list carries every locked tag" "3" "$(jq '.locks.tags | length' "${WORK}/plan.json")"
 check_equals "orphan lock is marked unprotected" \
   "false" "$(jq -r '.locks.tags[] | select(.tag == "5.6.0-PullRequest7.1") | .protected' "${WORK}/plan.json")"
@@ -222,15 +222,15 @@ check_equals "never_unlock pattern is carried on the lock entry" \
   "true" "$(jq -r '.locks.tags[] | select(.tag == "5.1.0-beta.1-7-keeplock") | .never_unlock' "${WORK}/plan.json")"
 
 echo "classify: age and count"
-check_equals "newest PR tag is kept by the floor" "always-keep-newest" "$(reason_of routemax/api 5.6.0-PullRequest1.1)"
-check_equals "second newest PR tag is kept by the floor" "always-keep-newest" "$(reason_of routemax/api 5.6.0-PullRequest2.1)"
-check_equals "young tag outside the floor is within retention" "within-retention" "$(reason_of routemax/api 5.6.0-PullRequest3.1)"
-check_equals "old tag outside the floor is a candidate" "1" "$(is_candidate routemax/api 5.6.0-PullRequest4.1)"
+check_equals "newest PR tag is kept by the floor" "always-keep-newest" "$(reason_of myproduct/api 5.6.0-PullRequest1.1)"
+check_equals "second newest PR tag is kept by the floor" "always-keep-newest" "$(reason_of myproduct/api 5.6.0-PullRequest2.1)"
+check_equals "young tag outside the floor is within retention" "within-retention" "$(reason_of myproduct/api 5.6.0-PullRequest3.1)"
+check_equals "old tag outside the floor is a candidate" "1" "$(is_candidate myproduct/api 5.6.0-PullRequest4.1)"
 check_equals "the floor keeps an old repository from being emptied" \
-  "always-keep-newest" "$(reason_of routemax/quiet 5.6.0-PullRequest9.1)"
+  "always-keep-newest" "$(reason_of myproduct/quiet 5.6.0-PullRequest9.1)"
 check_equals "quiet repository has no candidates" \
-  "0" "$(jq '[ .untag[] | select(.repository == "routemax/quiet") ] | length' "${WORK}/plan.json")"
-check_equals "inUse marker with 0-day retention is a candidate" "1" "$(is_candidate routemax/api 5.4.0-beta.1-100-qa-inUse)"
+  "0" "$(jq '[ .untag[] | select(.repository == "myproduct/quiet") ] | length' "${WORK}/plan.json")"
+check_equals "inUse marker with 0-day retention is a candidate" "1" "$(is_candidate myproduct/api 5.4.0-beta.1-100-qa-inUse)"
 
 echo "classify: would_delete / would_sweep (the lock reconciler's immediate-unlock signal)"
 # These are computed regardless of protection or lock state - purely "would the
@@ -288,19 +288,19 @@ check_equals "never_delete repository manifests are never swept" \
 echo "classify: tag group filter"
 ( classify_run "$WORK" pull_request_builds ) >/dev/null 2>"${TMP_ROOT}/classify.err" \
   || { echo "classify_run with filter failed:"; tail -20 "${TMP_ROOT}/classify.err"; exit 1; }
-check_equals "out-of-scope group is skipped" "not-in-scope" "$(reason_of routemax/api 5.4.0-beta.1-100-qa-inUse)"
+check_equals "out-of-scope group is skipped" "not-in-scope" "$(reason_of myproduct/api 5.4.0-beta.1-100-qa-inUse)"
 check_equals "in-scope group still yields candidates" "3" "$(jq '.totals.untag_candidates' "${WORK}/plan.json")"
 check_equals "filter is recorded in the plan" "pull_request_builds" "$(jq -r '.tag_groups[0]' "${WORK}/plan.json")"
 
 echo "classify: repository filter (targeted cleanup)"
-( classify_run "$WORK" "" "routemax/api,routemax/quiet" ) >/dev/null 2>"${TMP_ROOT}/classify.err" \
+( classify_run "$WORK" "" "myproduct/api,myproduct/quiet" ) >/dev/null 2>"${TMP_ROOT}/classify.err" \
   || { echo "classify_run with repositories failed:"; tail -5 "${TMP_ROOT}/classify.err"; exit 1; }
 check_equals "only the named repositories are in the plan" \
-  "routemax/api routemax/quiet" "$(jq -r '[ .repositories[].repository ] | sort | join(" ")' "${WORK}/plan.json")"
+  "myproduct/api myproduct/quiet" "$(jq -r '[ .repositories[].repository ] | sort | join(" ")' "${WORK}/plan.json")"
 check_equals "the filter is recorded" "2" "$(jq '.repositories_filter | length' "${WORK}/plan.json")"
 check_equals "decisions cover only the named repositories" \
   "0" "$(grep -c '"repository":"tools/kubectl"' "${WORK}/decisions.jsonl")"
-if ( classify_run "$WORK" "" "routemax/api,routemax/nope" ) >/dev/null 2>&1; then
+if ( classify_run "$WORK" "" "myproduct/api,myproduct/nope" ) >/dev/null 2>&1; then
   fail_test "an unknown repository in the filter fails the run"
 else
   pass "an unknown repository in the filter fails the run"

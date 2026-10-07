@@ -75,17 +75,17 @@ write_plan() {
     protection: { tags: 1, digests: 1 },
     locks: {
       tags: [
-        { repository: "routemax/api", tag: "held-1",      digest: "sha256:h1", age_days: 100, protected: true,  protection: ["protected:cluster=test-aks"], never_unlock: false },
-        { repository: "routemax/api", tag: "pinned-1",    digest: "sha256:p1", age_days: 100, protected: false, protection: [], never_unlock: true },
-        { repository: "routemax/api", tag: "orphan-old",  digest: "sha256:o1", age_days: 300, protected: false, protection: [], never_unlock: false },
-        { repository: "routemax/api", tag: "orphan-new",  digest: "sha256:o2", age_days: 300, protected: false, protection: [], never_unlock: false },
-        { repository: "routemax/api", tag: "orphan-fails", digest: "sha256:o3", age_days: 300, protected: false, protection: [], never_unlock: false },
-        { repository: "routemax/api", tag: "orphan-first", digest: "sha256:o4", age_days: 300, protected: false, protection: [], never_unlock: false },
-        { repository: "routemax/api", tag: "stale-immediate", digest: "sha256:o5", age_days: 200, protected: false, protection: [], never_unlock: false, would_delete: true }
+        { repository: "myproduct/api", tag: "held-1",      digest: "sha256:h1", age_days: 100, protected: true,  protection: ["protected:cluster=test-aks"], never_unlock: false },
+        { repository: "myproduct/api", tag: "pinned-1",    digest: "sha256:p1", age_days: 100, protected: false, protection: [], never_unlock: true },
+        { repository: "myproduct/api", tag: "orphan-old",  digest: "sha256:o1", age_days: 300, protected: false, protection: [], never_unlock: false },
+        { repository: "myproduct/api", tag: "orphan-new",  digest: "sha256:o2", age_days: 300, protected: false, protection: [], never_unlock: false },
+        { repository: "myproduct/api", tag: "orphan-fails", digest: "sha256:o3", age_days: 300, protected: false, protection: [], never_unlock: false },
+        { repository: "myproduct/api", tag: "orphan-first", digest: "sha256:o4", age_days: 300, protected: false, protection: [], never_unlock: false },
+        { repository: "myproduct/api", tag: "stale-immediate", digest: "sha256:o5", age_days: 200, protected: false, protection: [], never_unlock: false, would_delete: true }
       ],
       manifests: [
-        { repository: "routemax/api", digest: "sha256:m-orphan", tags: [], age_days: 300, protected: false, protection: [], never_unlock: false },
-        { repository: "routemax/api", digest: "sha256:m-stale-immediate", tags: [], age_days: 200, protected: false, protection: [], never_unlock: false, would_sweep: true }
+        { repository: "myproduct/api", digest: "sha256:m-orphan", tags: [], age_days: 300, protected: false, protection: [], never_unlock: false },
+        { repository: "myproduct/api", digest: "sha256:m-stale-immediate", tags: [], age_days: 200, protected: false, protection: [], never_unlock: false, would_sweep: true }
       ]
     }
   }' > "${work}/plan.json"
@@ -123,14 +123,14 @@ check_equals "a stale orphan tag unlocks on the very first run" "unlocked" "$(st
 check_equals "its unlock reason is recorded as already past retention" \
   "already_past_retention" "$(jq -r '.unlocked[] | select(.ref == "stale-immediate") | .unlock_basis' "${W1}/lock-result.json")"
 check_equals "the ACR call actually happened, no waiting" \
-  "1" "$(grep -c '^tag routemax/api stale-immediate true true$' "$CALLS")"
+  "1" "$(grep -c '^tag myproduct/api stale-immediate true true$' "$CALLS")"
 check_equals "totals count both the stale tag and the stale manifest as immediate unlocks" \
   "2" "$(jq '.totals.unlocked_immediately' "${W1}/lock-result.json")"
 check_equals "a genuinely unlocked item does not linger in the next ledger" \
   "0" "$(jq '[ .entries[] | select(.ref == "stale-immediate") ] | length' "${W1}/lock-ledger.json")"
 check_equals "a stale orphan manifest unlocks immediately too" "unlocked" "$(status_of sha256:m-stale-immediate "$W1")"
 check_equals "the manifest unlock call happened" \
-  "1" "$(grep -c '^manifest routemax/api sha256:m-stale-immediate true true$' "$CALLS")"
+  "1" "$(grep -c '^manifest myproduct/api sha256:m-stale-immediate true true$' "$CALLS")"
 
 echo "lock-reconcile: second run, ledger older than the wait"
 W2="${TMP_ROOT}/run2"
@@ -138,11 +138,11 @@ write_plan "$W2"
 mkdir -p "${W2}/previous"
 jq -n --argjson old "$DAYS_AGO_20" --argjson new "$DAYS_AGO_3" '{
   entries: [
-    { kind: "tag", repository: "routemax/api", ref: "orphan-old",   first_unprotected_at: $old },
-    { kind: "tag", repository: "routemax/api", ref: "orphan-new",   first_unprotected_at: $new },
-    { kind: "tag", repository: "routemax/api", ref: "orphan-fails", first_unprotected_at: $old },
-    { kind: "tag", repository: "routemax/api", ref: "held-1",       first_unprotected_at: $old },
-    { kind: "manifest", repository: "routemax/api", ref: "sha256:m-orphan", first_unprotected_at: $old }
+    { kind: "tag", repository: "myproduct/api", ref: "orphan-old",   first_unprotected_at: $old },
+    { kind: "tag", repository: "myproduct/api", ref: "orphan-new",   first_unprotected_at: $new },
+    { kind: "tag", repository: "myproduct/api", ref: "orphan-fails", first_unprotected_at: $old },
+    { kind: "tag", repository: "myproduct/api", ref: "held-1",       first_unprotected_at: $old },
+    { kind: "manifest", repository: "myproduct/api", ref: "sha256:m-orphan", first_unprotected_at: $old }
   ]
 }' > "${W2}/previous/lock-ledger.json"
 : > "$CALLS"
@@ -150,10 +150,10 @@ run_reconcile "$W2" --set run_settings.dry_run=false; RC=$?
 check_equals "run reports the failed unlock via exit code" "1" "$RC"
 check_equals "orphan past the wait is unlocked" "unlocked" "$(status_of orphan-old "$W2")"
 check_equals "unlock sets both attributes back to true" \
-  "1" "$(grep -c '^tag routemax/api orphan-old true true$' "$CALLS")"
+  "1" "$(grep -c '^tag myproduct/api orphan-old true true$' "$CALLS")"
 check_equals "orphan manifest past the wait is unlocked" "unlocked" "$(status_of sha256:m-orphan "$W2")"
 check_equals "manifest unlock uses the manifest endpoint" \
-  "1" "$(grep -c '^manifest routemax/api sha256:m-orphan true true$' "$CALLS")"
+  "1" "$(grep -c '^manifest myproduct/api sha256:m-orphan true true$' "$CALLS")"
 check_equals "orphan inside the wait keeps waiting" "waiting" "$(status_of orphan-new "$W2")"
 check_equals "orphan never seen before starts waiting now" "waiting" "$(status_of orphan-first "$W2")"
 check_equals "a protected lock is held even if the ledger remembers it" "held" "$(status_of held-1 "$W2")"

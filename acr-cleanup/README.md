@@ -3,11 +3,8 @@
 Config-driven, safe, parallel cleanup for Azure Container Registry, with image protection derived
 from what is actually running in Kubernetes.
 
-Built for `rmxacrcommon` (RouteMAX) but intentionally product-agnostic — see [ADOPTION.md](./ADOPTION.md)
+Built for `myregistry` (MyProduct) but intentionally product-agnostic — see [ADOPTION.md](./ADOPTION.md)
 to use it for another product.
-
-Tracking: [US 281954](https://dev.azure.com/optym/PlatformEngineering/_workitems/edit/281954) ·
-progress: [progress.md](./progress.md)
 
 ## Documents
 
@@ -20,14 +17,12 @@ progress: [progress.md](./progress.md)
 | [ADOPTION.md](./ADOPTION.md) | bring the module to another product |
 | [MAINTENANCE.md](./MAINTENANCE.md) | see every external API, CLI and tool it depends on, and how to update when one breaks |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | change the code: where each behaviour lives, the data contracts between stages, how tests are built |
-| [progress.md](./progress.md) | status of the user story, decisions, open items, change log |
-| [docs/evidence/](./docs/evidence/) | snapshots of real runs: before/after numbers and the rendered reports |
 
 ---
 
 ## 1. Why this exists
 
-`rmxacrcommon` baseline captured on 2026-09-03:
+`myregistry` baseline captured on 2026-09-03:
 
 | Metric | Value |
 | --- | --- |
@@ -39,7 +34,7 @@ progress: [progress.md](./progress.md)
 | Soft delete | **not available** — blocked by geo-replication, see [section 4](#l4--structural-floors-and-the-recovery-window) |
 
 Several repositories hold roughly **twice as many manifests as tags** — for example
-`routemax/tsp` at 9,994 tags vs 18,956 manifests. Those are orphaned manifests that
+`myproduct/tsp` at 9,994 tags vs 18,956 manifests. Those are orphaned manifests that
 `acr purge --untagged` has never been able to reclaim. That is where the terabytes are.
 
 At 455k manifests, enabling Microsoft Defender for Cloud image scanning would be prohibitively
@@ -49,7 +44,7 @@ expensive, which is the cost driver behind the user story.
 
 | Mechanism | What it did | Why it failed |
 | --- | --- | --- |
-| ACR task `imagePurgeTask` | `acr purge --filter 'routemax\/\w+.*:.*' --ago 365d --untagged` | 365d retention for every kind of tag; skips locked images silently; ignores non-`routemax/*` repos |
+| ACR task `imagePurgeTask` | `acr purge --filter 'myproduct\/\w+.*:.*' --ago 365d --untagged` | 365d retention for every kind of tag; skips locked images silently; ignores non-`myproduct/*` repos |
 | ACR task `PRpurgeTask` | Same, filtered to `PullRequest` tags | Same 365d value; PR builds are the highest-volume group |
 | "Lock deployed images" release step | Locked `write`+`delete` on deployed prod images | **Nothing ever unlocked them.** Every prod deploy since inception permanently pinned a full image set. Also blocked the untagged-manifest sweep behind those digests |
 | `inUse` marker tags | `az acr import` created `<tag>-<env>-inUse` to mark deployed digests | Right idea, wrong storage. Only untagged in non-prod, and additionally locked in prod, so markers accumulated forever. Also doubled tag count, and matched tags by unanchored substring (`5.5.0-beta.1-13` matches `5.5.0-beta.1-136`) |
@@ -102,7 +97,7 @@ devops/acr-cleanup/
 ├── deploy/
 │   └── lock-deployed-images.sh   # used by the release task group at deploy time
 ├── config/
-│   ├── routemax.yaml
+│   ├── myproduct.yaml
 │   └── example.yaml
 ├── tests/
 │   ├── config.test.sh                # config load, overrides, validation
@@ -114,14 +109,12 @@ devops/acr-cleanup/
 │   ├── report.test.sh                # result.json / the 3 report-*.html files, SendGrid payload
 │   └── lock-deployed-images.test.sh  # environment gate, manifest extraction, lock calls
 ├── tools/
-│   ├── snapshot-evidence.sh          # summary.md + report files from a work dir, for docs/evidence/
+│   ├── snapshot-evidence.sh          # summary.md + report files from a work dir, for archiving a run
 │   ├── audit-running-images.sh       # post-cleanup: is everything actually deployed still pullable?
 │   │                                 #   (stage 6, opt-in via acr-cleanup.sh --validate-after)
 │   └── audit-multiarch-references.sh # registry-wide: every tagged multi-arch image, deployed or not
-├── docs/evidence/            # captured runs and incidents: numbers and rendered reports
 ├── README.md · USER_GUIDE.md · CONFIGURATION.md · RUNBOOK.md · ADOPTION.md
-├── MAINTENANCE.md · CONTRIBUTING.md · AGENTS.md
-└── progress.md
+└── MAINTENANCE.md · CONTRIBUTING.md · AGENTS.md
 ```
 
 All tests are pure: no Azure, no network, no cluster access.
@@ -206,8 +199,8 @@ Per cluster, read:
 Extraction walks the whole JSON document for `image` and `imageID` keys rather than naming specific
 paths, so a new workload kind or an injected sidecar is picked up without a code change.
 
-All six RouteMAX AKS clusters have a **private API server with Azure RBAC**. The pipeline therefore
-runs on the on-prem agent pool `RouteMax-Agents-OnPrem-Linux`, which already has line of sight to
+All six MyProduct AKS clusters have a **private API server with Azure RBAC**. The pipeline therefore
+runs on the on-prem agent pool `Onprem-Linux-Agents`, which already has line of sight to
 every cluster because application deployments use it. That means plain
 `az aks get-credentials` + `kubectl`, and **no `runcommand/action` permission** — see
 [section 11](#11-permissions-required). Azure RBAC clusters also need `kubelogin`, otherwise
@@ -251,11 +244,11 @@ missing history is never an error:
 #### ACR soft delete cannot be used on this registry
 
 Soft delete is [not supported on registries configured for geo-replication](https://learn.microsoft.com/en-us/azure/container-registry/container-registry-soft-delete-policy),
-and `rmxacrcommon` is replicated to `westus2` (zone-redundant) and `eastus`. Enabling it fails with
-*"Soft delete cannot be enabled on the registry rmxacrcommon because soft delete is not compatible
+and `myregistry` is replicated to `westus2` (zone-redundant) and `eastus`. Enabling it fails with
+*"Soft delete cannot be enabled on the registry myregistry because soft delete is not compatible
 with zone redundant registries or registries with geo-replications."*
 
-Removing the replicas is not an option — `rmx-aks-mprod-wus2-c2` and `rmx-aks-sprod-wus2-c2` pull
+Removing the replicas is not an option — `my-aks-mprod-wus2-c2` and `my-aks-sprod-wus2-c2` pull
 from the West US replica, so dropping it would add cross-region latency, egress cost and a regional
 dependency for production pulls.
 
@@ -289,8 +282,7 @@ Two details of the sweep worth knowing:
 - **Age is the manifest's `lastUpdateTime`**, which ACR bumps when a manifest's tags change, so it
   measures time since the last untag rather than time since the push. This is the same clock
   `acr purge --untagged --ago` uses. Confirm it on this registry during phase 1 by comparing a
-  manifest's `lastUpdateTime` before and after an untag (see the phase-1 checklist in
-  [progress.md](./progress.md)).
+  manifest's `lastUpdateTime` before and after an untag.
 - **Every manifest is re-read immediately before its delete.** The inventory may be an hour old;
   if a tag has been pushed onto the manifest or a lock added since the plan, it is skipped with
   reason `skipped:changed-since-plan`.
@@ -312,8 +304,7 @@ Two details of the sweep worth knowing:
   reason `referenced-by-parent`, regardless of the child's own age.
 
   This is not a hypothetical — trusting the bulk field's empty `references` is exactly what let real
-  child manifests get swept in the September 2026 incident (see the "Production incident" section
-  near the top of [progress.md](./progress.md) and
+  child manifests get swept in a past incident (see
   [RUNBOOK.md §6](./RUNBOOK.md#6-a-tag-exists-but-imagepullbackoff-anyway-multi-arch-children)). To
   verify the reference graph is intact after a cleanup run, use
   [`tools/audit-running-images.sh`](./tools/audit-running-images.sh) (fast, scoped to what is actually
@@ -375,11 +366,11 @@ lock stops the sweep and a manual `az acr repository delete --image repo@digest`
 
 ### Cross-repository tag protection (opt-in, `in_use_protection.protect_tag_across_repositories`)
 
-**Why this exists.** RouteMAX's build pipeline (`build/components/backend.yaml`, `engine.yaml`)
+**Why this exists.** MyProduct's build pipeline (`build/components/backend.yaml`, `engine.yaml`)
 stamps **one shared version tag** across every service image in a single run, regardless of module —
 an `ibplanning`-only image and a `dispatch`-only image built in the same pipeline run carry the exact
 same tag. But `dispatch` and `ibplanning` are two **independent Helm charts**
-(`deployment/routemax/dispatch/`, `deployment/routemax/ibplanning/`), installed as separate releases
+(`deployment/myproduct/dispatch/`, `deployment/myproduct/ibplanning/`), installed as separate releases
 per tenant. A tenant that has only ever installed the `ibplanning` chart has no Deployment, no pod,
 and no Helm history for anything under `dispatch/charts/*` — at any version, past or present.
 
@@ -387,8 +378,8 @@ L1 and L2 above are correct in isolation: if no currently-installed `dispatch` r
 pinned to a given tag, that tag is genuinely unreferenced *for `dispatch`* — and cleanup working as
 designed will drop it, even while the identical tag stays protected for `ibplanning`'s services
 because an `ibplanning`-only tenant is still running it. That is exactly what happened on
-2026-09-10: `routemax/driver-eventprocessor:4.18.0-beta.1-143` and `routemax/driver-tsp:4.18.0-beta.1-143`
-(both `dispatch`-only images) were untagged as stale, while `routemax/api:4.18.0-beta.1-143` (an
+2026-09-10: `myproduct/driver-eventprocessor:4.18.0-beta.1-143` and `myproduct/driver-tsp:4.18.0-beta.1-143`
+(both `dispatch`-only images) were untagged as stale, while `myproduct/api:4.18.0-beta.1-143` (an
 `ibplanning` image, same tag) stayed protected the whole time. Nothing was actually broken — no
 tenant was running the deleted `dispatch` images — but it exposed a real forward-looking risk: a
 tenant can enable a **previously-disabled module on their existing, already-pinned version**, with no
@@ -421,11 +412,10 @@ prior cleanup run having quietly deleted that module's half of the shared tag.
   would be the wrong default for a product where independent services are versioned independently —
   hence this is opt-in (`in_use_protection.protect_tag_across_repositories`, default `false` in
   [config/example.yaml](./config/example.yaml)) rather than always-on, and is explicitly enabled only
-  in [config/routemax.yaml](./config/routemax.yaml).
+  in [config/myproduct.yaml](./config/myproduct.yaml).
 - **It cannot substitute for the real fix.** The durable answer is a process one: treat "enable a
   dormant module for an existing tenant" as a coordinated upgrade to the tenant's latest chart
-  version, not a flag flip on their current pinned version — see [progress.md](./progress.md) for the
-  decision record. This layer is the technical backstop for tenants not yet migrated to that process.
+  version, not a flag flip on their current pinned version. This layer is the technical backstop for tenants not yet migrated to that process.
 
 ### L3 — Deployment ledger (deferred, not implemented)
 
@@ -485,7 +475,7 @@ These are **OR'd** — a tag survives if *either* rule wants to keep it.
 | `always_keep_newest: 2` | Regardless of age, never drop below the 2 newest tags in this repository for this tag group |
 
 The count floor exists because age alone would empty a repository that simply has not been built
-recently — `routemax/dynamic-routing-driver` has 1 tag and `routemax/saiamockservice` has 8.
+recently — `myproduct/dynamic-routing-driver` has 1 tag and `myproduct/saiamockservice` has 8.
 
 Worked example for `pull_request_builds` with `delete_when_older_than_days: 7`,
 `always_keep_newest: 2`:
@@ -500,7 +490,7 @@ Worked example for `pull_request_builds` with `delete_when_older_than_days: 7`,
 If a repository held only the first two tags and both were 200 days old, both are still kept — the
 floor wins.
 
-### RouteMAX tag groups
+### MyProduct tag groups
 
 Tags come from GitVersion via
 [build/components/setversion.yaml](../../build/components/setversion.yaml), which replaces `+` with
@@ -584,26 +574,26 @@ design reasons behind the important ones:
 
 ```bash
 # validate the config only. No Azure calls, no cluster access, safe anywhere.
-./acr-cleanup.sh --config config/routemax.yaml --operation validate-config
+./acr-cleanup.sh --config config/myproduct.yaml --operation validate-config
 
 # show the effective config after defaults and overrides (JSON on stdout, logs on stderr)
-./acr-cleanup.sh --config config/routemax.yaml --print-config | jq .
+./acr-cleanup.sh --config config/myproduct.yaml --print-config | jq .
 
 # build the protection set from every cluster. Read-only.
-./acr-cleanup.sh --config config/routemax.yaml --operation discover
+./acr-cleanup.sh --config config/myproduct.yaml --operation discover
 
 # one cluster only, which is how the pipeline runs it (one job per service connection)
-./acr-cleanup.sh --config config/routemax.yaml --operation discover \
-  --cluster rmx-aks-np-eus-c1
+./acr-cleanup.sh --config config/myproduct.yaml --operation discover \
+  --cluster my-aks-np-c1
 
 # merge the per-cluster files written by those jobs
-./acr-cleanup.sh --config config/routemax.yaml --merge
+./acr-cleanup.sh --config config/myproduct.yaml --merge
 
 # plan only, no mutation (this is the default)
-./acr-cleanup.sh --config config/routemax.yaml --operation plan
+./acr-cleanup.sh --config config/myproduct.yaml --operation plan
 
 # real run, PR builds only, capped
-./acr-cleanup.sh --config config/routemax.yaml \
+./acr-cleanup.sh --config config/myproduct.yaml \
   --operation untag-stale-tags --no-dry-run \
   --tag-groups pull_request_builds \
   --set run_settings.max_deletions_per_run=5000
@@ -621,7 +611,7 @@ design reasons behind the important ones:
 | `sweep-untagged-manifests` | 1–5, 7, 8 (+6 with `--validate-after`), execute deletes manifests untagged long enough | yes, irreversible |
 | `untag-and-sweep` | both execute steps in one run | yes; prefer two separate runs so each has its own report |
 
-**Targeted cleanup**: `--repositories routemax/ui,routemax/tsp` limits inventory, classification,
+**Targeted cleanup**: `--repositories myproduct/ui,myproduct/tsp` limits inventory, classification,
 execution and the report to those repositories, so a single bloated repository can be handled
 without reading all 388k tags. Discovery still reads every cluster, so protection is never partial.
 
@@ -681,9 +671,9 @@ check (`<dir>/report-summary.html`, `report-deleted.html`, `report-protected.htm
 ### Pipeline
 
 - [`build/Maintenance/acr-cleanup-template.yaml`](../../build/Maintenance/acr-cleanup-template.yaml) — reusable template
-- [`build/Maintenance/acr-cleanup-routemax.yaml`](../../build/Maintenance/acr-cleanup-routemax.yaml) — RouteMAX wrapper
+- [`build/Maintenance/acr-cleanup-myproduct.yaml`](../../build/Maintenance/acr-cleanup-myproduct.yaml) — MyProduct wrapper
 
-Pool: `RouteMax-Agents-OnPrem-Linux`. Schedules: **Saturday 17:30 UTC "Weekly untag"** and
+Pool: `Onprem-Linux-Agents`. Schedules: **Saturday 17:30 UTC "Weekly untag"** and
 **Sunday 17:30 UTC "Weekly manifest sweep"**. The template derives the operation from the schedule
 display name (`untag` / `manifest`), so those words are load-bearing. Manual runs take an
 `operation` parameter that defaults to `plan`, plus `dryRun`, `tagGroups`, `extraSettings`
@@ -729,7 +719,7 @@ subshell also inherits the parent's cached OAuth access token, so workers never 
 against each other.
 
 The Helm phase dominates discovery: one `helm get manifest` per release per retained revision.
-RouteMAX runs a namespace per tenant, so `rmx-aks-np-eus-c1` alone is 49 releases x up to 3
+MyProduct runs a namespace per tenant, so `my-aks-np-c1` alone is 49 releases x up to 3
 revisions. Measured on that cluster:
 
 | | Wall clock | Protected references |
@@ -814,9 +804,9 @@ manifest was swept, stopping the cleanup, and the symptom → action table.
 
 | Scope | Role / action | Why |
 | --- | --- | --- |
-| ACR `rmxacrcommon` | `AcrPull` | read tag and manifest metadata |
-| ACR `rmxacrcommon` | `AcrDelete` | untag, delete manifests, lock/unlock |
-| ACR `rmxacrcommon` | `Reader` | `az acr show-usage` for the report |
+| ACR `myregistry` | `AcrPull` | read tag and manifest metadata |
+| ACR `myregistry` | `AcrDelete` | untag, delete manifests, lock/unlock |
+| ACR `myregistry` | `Reader` | `az acr show-usage` for the report |
 | AKS | `Azure Kubernetes Service Cluster User` | connect |
 | AKS | AKS RBAC Reader, or an equivalent read-only ClusterRole | read pods and workloads |
 | Subscription | `Microsoft.ContainerService/managedClusters/read` | `az aks list` for the unlisted-cluster warning |
@@ -826,13 +816,13 @@ No Kubernetes **write** permission is required.
 Agent prerequisites: **bash 4.4+**, `jq`, `az`, `kubectl`, `helm`, and either `yq` or `python3`
 with PyYAML.
 
-Because the pipeline runs on `RouteMax-Agents-OnPrem-Linux`, which has network line of sight to the
+Because the pipeline runs on `Onprem-Linux-Agents`, which has network line of sight to the
 private API servers, `Microsoft.ContainerService/managedClusters/runcommand/action` is **not**
 needed. That matters: `runcommand` permits arbitrary command execution inside any cluster in scope,
 and avoiding it keeps this a genuinely read-only integration with Kubernetes.
 
 One Azure service connection per subscription:
-RouteMAX Multi-Tenant · RouteMAX Multi-Tenant Dev/Test · SAIA UAT · SAIA Prod.
+MyProduct Multi-Tenant · MyProduct Multi-Tenant Dev/Test · SAIA UAT · SAIA Prod.
 
 ---
 

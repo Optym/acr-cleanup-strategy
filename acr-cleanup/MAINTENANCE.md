@@ -106,8 +106,7 @@ Failure only warns. Override the URL with `SENDGRID_URL` for tests or a proxy.
    inventory live in one jq program in `acr_inventory_repository`.
 3. Run all suites, then a live `--operation plan --skip-discover` (read-only) and compare
    `result.json` totals with the previous run's.
-4. Record the change in [progress.md](./progress.md)'s change log and, if a dependency version
-   moved, in this file.
+4. If a dependency version moved, record it in this file.
 
 ## 3. Deprecation watch
 
@@ -116,5 +115,5 @@ Failure only warns. Override the URL with `SENDGRID_URL` for tests or a proxy.
 | ACR soft delete | preview; incompatible with geo-replication | If it becomes GA and supports replicas, enable it and shorten `min_untagged_manifest_age_days`; the two-phase design stays valid |
 | `az acr login --expose-token` | stable | `acr_init` |
 | Helm 3 `helm get manifest --revision` | stable | discover, deploy lock |
-| KEDA `scaledjobs.keda.sh` CRD | present on RouteMAX clusters | discover adds the kind only when the CRD exists |
+| KEDA `scaledjobs.keda.sh` CRD | present on MyProduct clusters | discover adds the kind only when the CRD exists |
 | ADO `DownloadPipelineArtifact@2` `buildVersionToDownload: latestFromBranch` | stable | previous report / lock ledger |

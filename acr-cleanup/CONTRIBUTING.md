@@ -43,7 +43,7 @@ Rules that hold everywhere:
 
 | I want to… | Edit | Then run |
 | --- | --- | --- |
-| Add or change a cleanup rule, retention, never-delete entry, cluster | `config/routemax.yaml` only | `./acr-cleanup.sh --config … --operation validate-config` |
+| Add or change a cleanup rule, retention, never-delete entry, cluster | `config/myproduct.yaml` only | `./acr-cleanup.sh --config … --operation validate-config` |
 | Add a config option | `_config_defaults` + `_config_validate` in `lib/config.sh`; `CONFIGURATION.md`; read it with `config_get` where used | `tests/config.test.sh` |
 | Change how a tag is judged (order of checks, a new skip reason) | the `if/elif` chain in `_CLASSIFY_JQ` in `lib/classify.sh`; add the reason to the README §9 list | `tests/classify.test.sh` |
 | Change which manifests are swept | the `base_reason` block in `_CLASSIFY_JQ` | `tests/classify.test.sh` |
@@ -156,4 +156,4 @@ Run one suite with `bash tests/<name>.test.sh`; a failing case prints `FAIL <lab
 - Do not rename reason strings, file names in the work dir, or config keys; they are referenced by
   the docs, the pipeline and the report.
 - Update the matching document: option → `CONFIGURATION.md`, behaviour → `README.md`, operator
-  action → `RUNBOOK.md`, dependency → `MAINTENANCE.md`, status → `progress.md`.
+  action → `RUNBOOK.md`, dependency → `MAINTENANCE.md`.

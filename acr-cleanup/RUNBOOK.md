@@ -1,6 +1,6 @@
 # Runbook: operating the cleanup and recovering images
 
-For people on call for `rmxacrcommon`. The architecture is in [README.md](./README.md); this file is
+For people on call for `myregistry`. The architecture is in [README.md](./README.md); this file is
 what to do when something needs doing.
 
 ## 1. Where the evidence is
@@ -46,9 +46,9 @@ before `min_untagged_manifest_age_days` (14) after the untag. Act inside that wi
 2. Put the tag back from the digest (needs `AcrPush` on the registry):
 
    ```bash
-   az acr import -n rmxacrcommon \
-     --source rmxacrcommon.azurecr.io/routemax/api@sha256:<digest> \
-     -t routemax/api:5.5.0-beta.1-136
+   az acr import -n myregistry \
+     --source myregistry.azurecr.io/myproduct/api@sha256:<digest> \
+     -t myproduct/api:5.5.0-beta.1-136
    ```
 
    `az acr import` from the same registry is a metadata operation; no layers are copied.
@@ -56,7 +56,7 @@ before `min_untagged_manifest_age_days` (14) after the untag. Act inside that wi
 3. Confirm:
 
    ```bash
-   az acr repository show -n rmxacrcommon --image routemax/api:5.5.0-beta.1-136
+   az acr repository show -n myregistry --image myproduct/api:5.5.0-beta.1-136
    ```
 
 4. Stop it happening again: add the tag to `never_delete.tag_patterns`, tag it `…-donotdelete`, or
@@ -78,9 +78,9 @@ geo-replication). Options:
 ### 2.3 Many tags, one repository
 
 ```bash
-jq -r '.deleted.items[] | select(.repository == "routemax/api") | "\(.digest) \(.tag)"' result.json \
+jq -r '.deleted.items[] | select(.repository == "myproduct/api") | "\(.digest) \(.tag)"' result.json \
 | while read -r digest tag; do
-    az acr import -n rmxacrcommon --source "rmxacrcommon.azurecr.io/routemax/api@${digest}" -t "routemax/api:${tag}"
+    az acr import -n myregistry --source "myregistry.azurecr.io/myproduct/api@${digest}" -t "myproduct/api:${tag}"
   done
 ```
 
@@ -91,7 +91,7 @@ Restore every untagged item from that run:
 ```bash
 jq -r '.deleted.items[] | select(.status == "untagged") | "\(.repository) \(.digest) \(.tag)"' result.json \
 | while read -r repo digest tag; do
-    az acr import -n rmxacrcommon --source "rmxacrcommon.azurecr.io/${repo}@${digest}" -t "${repo}:${tag}" || echo "FAILED ${repo}:${tag}"
+    az acr import -n myregistry --source "myregistry.azurecr.io/${repo}@${digest}" -t "${repo}:${tag}" || echo "FAILED ${repo}:${tag}"
   done
 ```
 
@@ -101,7 +101,7 @@ Then set `run_settings.dry_run: true` (or disable the schedules) before the next
 
 | Need | Action |
 | --- | --- |
-| Stop everything now | Disable both schedules on the `acr-cleanup-routemax` pipeline. Nothing else runs on its own |
+| Stop everything now | Disable both schedules on the `acr-cleanup-myproduct` pipeline. Nothing else runs on its own |
 | Keep running but mutate nothing | `run_settings.dry_run: true` in the config, merged to `develop` |
 | Stop only the irreversible part | Disable the "Weekly manifest sweep" schedule; untag keeps running |
 | Protect one image | Tag it `<tag>-donotdelete` (never deleted, never unlocked), or add it to `never_delete.tag_patterns` |
@@ -129,13 +129,13 @@ Then set `run_settings.dry_run: true` (or disable the schedules) before the next
 
 ```bash
 # is it running anywhere, according to the last run?
-jq -r '.sources[] | select(.repository == "routemax/api" and .tag == "5.5.0-beta.1-136")' protection-set.json
+jq -r '.sources[] | select(.repository == "myproduct/api" and .tag == "5.5.0-beta.1-136")' protection-set.json
 
 # what did the classifier decide?
-grep -F '"repository":"routemax/api"' decisions.jsonl | grep -F '"tag":"5.5.0-beta.1-136"'
+grep -F '"repository":"myproduct/api"' decisions.jsonl | grep -F '"tag":"5.5.0-beta.1-136"'
 
 # is it locked?
-az acr repository show -n rmxacrcommon --image routemax/api:5.5.0-beta.1-136 --query changeableAttributes
+az acr repository show -n myregistry --image myproduct/api:5.5.0-beta.1-136 --query changeableAttributes
 ```
 
 ## 6. A tag exists but `ImagePullBackOff` anyway (multi-arch children)
@@ -154,33 +154,32 @@ still-tagged multi-arch image in the registry (109 of 112, across 34 repositorie
 Container Registry's bulk manifest-listing API does not return the parent/child relationship for an
 index - it comes back empty even when the index genuinely has children, and the tool's classifier
 trusted that field. Fixed in `lib/acr-api.sh` (inventory now resolves the real reference graph with a
-per-manifest lookup, and aborts rather than proceeding if that lookup fails) - see the change log in
-[progress.md](./progress.md) for the full incident writeup and the list of every image found broken.
+per-manifest lookup, and aborts rather than proceeding if that lookup fails).
 
 **Diagnose a specific tag by hand** (read-only, needs `AcrPull`):
 
 ```bash
-REPO=routemax/keycloak
+REPO=myproduct/keycloak
 TAG=5.2.0-alpha.57
 
-RT=$(az acr login --name rmxacrcommon --expose-token --only-show-errors -o json | jq -r .accessToken)
-AT=$(curl -sS -X POST "https://rmxacrcommon.azurecr.io/oauth2/token" \
-  --data-urlencode "grant_type=refresh_token" --data-urlencode "service=rmxacrcommon.azurecr.io" \
+RT=$(az acr login --name myregistry --expose-token --only-show-errors -o json | jq -r .accessToken)
+AT=$(curl -sS -X POST "https://myregistry.azurecr.io/oauth2/token" \
+  --data-urlencode "grant_type=refresh_token" --data-urlencode "service=myregistry.azurecr.io" \
   --data-urlencode "scope=repository:${REPO}:metadata_read,pull" --data-urlencode "refresh_token=$RT" \
   | jq -r .access_token)
 
 # the tag's manifest (the index) - note its digest and mediaType
 INDEX=$(curl -sS -H "Authorization: Bearer $AT" \
-  "https://rmxacrcommon.azurecr.io/acr/v1/${REPO}/_tags/${TAG}" | jq -r '.tag.digest')
+  "https://myregistry.azurecr.io/acr/v1/${REPO}/_tags/${TAG}" | jq -r '.tag.digest')
 
 # the index's real children (only a per-digest GET returns these - the bulk
 # listing does not, which is exactly the bug above)
 curl -sS -H "Authorization: Bearer $AT" \
-  "https://rmxacrcommon.azurecr.io/acr/v1/${REPO}/_manifests/${INDEX}" \
+  "https://myregistry.azurecr.io/acr/v1/${REPO}/_manifests/${INDEX}" \
   | jq -r '.manifest.references[]?.digest' \
 | while read -r child; do
     code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $AT" \
-      "https://rmxacrcommon.azurecr.io/acr/v1/${REPO}/_manifests/${child}")
+      "https://myregistry.azurecr.io/acr/v1/${REPO}/_manifests/${child}")
     echo "$child -> HTTP $code"
   done
 ```
@@ -188,7 +187,7 @@ curl -sS -H "Authorization: Bearer $AT" \
 A `404` on any child confirms this failure mode. There is no soft delete on this registry, so a
 swept child is **not recoverable** - rebuild the image under a new tag and redeploy to that; then
 untag the broken one so nothing can accidentally redeploy to it (`az acr repository untag -n
-rmxacrcommon --image "${REPO}:${TAG}"`).
+myregistry --image "${REPO}:${TAG}"`).
 
 **Find every other tag in this state before it causes an outage.** Two read-only tools, both
 covered in [USER_GUIDE.md §6](./USER_GUIDE.md#6-post-cleanup-validation):

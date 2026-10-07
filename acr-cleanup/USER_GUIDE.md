@@ -29,8 +29,8 @@ and for the deploy-time lock, `Reader` on the registry for the storage figure, a
 
 ```bash
 cd devops/acr-cleanup
-./acr-cleanup.sh --config config/routemax.yaml --operation validate-config
-./acr-cleanup.sh --config config/routemax.yaml --print-config | jq .run_settings
+./acr-cleanup.sh --config config/myproduct.yaml --operation validate-config
+./acr-cleanup.sh --config config/myproduct.yaml --print-config | jq .run_settings
 ```
 
 Touches nothing. Fails loudly on a bad regex, a shadowed rule (an example tag claimed by an earlier
@@ -49,11 +49,11 @@ the last `keep_helm_revisions` Helm revisions, in every listed cluster.
 
 ```bash
 # one cluster first
-./acr-cleanup.sh --config config/routemax.yaml --operation discover --cluster rmx-aks-np-eus-c1
-jq '{status, entries: (.entries | length), suspect_hosts, unlisted_clusters}' .acr-cleanup-work/protection/rmx-aks-np-eus-c1.json
+./acr-cleanup.sh --config config/myproduct.yaml --operation discover --cluster my-aks-np-c1
+jq '{status, entries: (.entries | length), suspect_hosts, unlisted_clusters}' .acr-cleanup-work/protection/my-aks-np-c1.json
 
 # all clusters, then merged
-./acr-cleanup.sh --config config/routemax.yaml --operation discover
+./acr-cleanup.sh --config config/myproduct.yaml --operation discover
 jq '{clusters, tags: (.protected_tags | length), digests: (.protected_digests | length)}' .acr-cleanup-work/protection-set.json
 ```
 
@@ -72,21 +72,21 @@ Reads every repository's tags and manifests over the ACR REST API, with lock sta
 
 ```bash
 # one repository first
-./acr-cleanup.sh --config config/routemax.yaml --operation inventory --repository routemax/saiamockservice
-jq '.tags[0], .manifests[0]' .acr-cleanup-work/inventory/routemax__saiamockservice.json
+./acr-cleanup.sh --config config/myproduct.yaml --operation inventory --repository myproduct/saiamockservice
+jq '.tags[0], .manifests[0]' .acr-cleanup-work/inventory/myproduct__saiamockservice.json
 
 # the whole registry (386k tags: 10 to 20 minutes), then merged automatically
-./acr-cleanup.sh --config config/routemax.yaml --operation inventory
+./acr-cleanup.sh --config config/myproduct.yaml --operation inventory
 jq '.totals' .acr-cleanup-work/inventory.json
 ```
 
-`inventory.json` for `rmxacrcommon` is about 350 MB. Keep it; stages 3 to 7 can be re-run against it
+`inventory.json` for `myregistry` is about 350 MB. Keep it; stages 3 to 7 can be re-run against it
 with `--skip-inventory` while you tune the rules.
 
 ### Stage 3: classify, and the report (read-only)
 
 ```bash
-./acr-cleanup.sh --config config/routemax.yaml --operation plan --skip-discover --skip-inventory
+./acr-cleanup.sh --config config/myproduct.yaml --operation plan --skip-discover --skip-inventory
 open .acr-cleanup-work/report-summary.html
 ```
 
@@ -118,7 +118,7 @@ Tune, then re-run `plan` with `--skip-discover --skip-inventory` (seconds to a m
 without editing the file:
 
 ```bash
-./acr-cleanup.sh --config config/routemax.yaml --operation plan --skip-discover --skip-inventory \
+./acr-cleanup.sh --config config/myproduct.yaml --operation plan --skip-discover --skip-inventory \
   --set rule.pull_request_builds.delete_when_older_than_days=14 \
   --tag-groups pull_request_builds
 ```
@@ -126,7 +126,7 @@ without editing the file:
 ### Stage 4 and 5: lock reconcile and execute, dry run
 
 ```bash
-./acr-cleanup.sh --config config/routemax.yaml --operation untag-stale-tags --skip-discover --skip-inventory --dry-run
+./acr-cleanup.sh --config config/myproduct.yaml --operation untag-stale-tags --skip-discover --skip-inventory --dry-run
 jq '.totals' .acr-cleanup-work/lock-result.json
 jq '.totals' .acr-cleanup-work/delete-result.json
 ```
@@ -139,7 +139,7 @@ With `dry_run: true` (the shipped default) both stages log what they would do an
 Only after two clean dry runs. Start with the highest-volume, lowest-risk group and a low cap:
 
 ```bash
-./acr-cleanup.sh --config config/routemax.yaml --operation untag-stale-tags \
+./acr-cleanup.sh --config config/myproduct.yaml --operation untag-stale-tags \
   --skip-discover --skip-inventory \
   --no-dry-run --tag-groups pull_request_builds --set run_settings.max_deletions_per_run=500
 ```
@@ -154,13 +154,13 @@ When the registry is large, work one repository at a time. `--repositories` limi
 to the named repositories; discovery still covers every cluster.
 
 ```bash
-./acr-cleanup.sh --config config/routemax.yaml --operation plan --repositories routemax/ui
-./acr-cleanup.sh --config config/routemax.yaml --operation untag-stale-tags --no-dry-run \
-  --repositories routemax/ui --skip-discover --skip-inventory
+./acr-cleanup.sh --config config/myproduct.yaml --operation plan --repositories myproduct/ui
+./acr-cleanup.sh --config config/myproduct.yaml --operation untag-stale-tags --no-dry-run \
+  --repositories myproduct/ui --skip-discover --skip-inventory
 ```
 
 The inventory then holds only those repositories (about a minute for a 10k-tag repository), and
-the report header shows `repositories: routemax/ui`. A repository name that does not exist in the
+the report header shows `repositories: myproduct/ui`. A repository name that does not exist in the
 registry fails the run rather than silently doing nothing. The pipeline exposes the same as the
 `repositories` parameter. The singular `--repository <name>` is the pipeline's inventory-shard
 flag; with any other operation it is treated as `--repositories <name>` (and says so), instead of
@@ -186,7 +186,7 @@ key in the environment named by `email_report.api_key_variable`.
 
 ## 4. Reading the work directory
 
-| File | Written by | Size on rmxacrcommon |
+| File | Written by | Size on myregistry |
 | --- | --- | --- |
 | `config.json` | config load | 5 KB |
 | `protection/<cluster>.json`, `protection-set.json` | stage 1 | 2.5 MB |
@@ -238,7 +238,7 @@ Full detail (with a diagram) is in [README.md §3](./README.md#3-execution-flow)
 
 ## 5. The pipeline, when you are ready
 
-[build/Maintenance/acr-cleanup-routemax.yaml](../../build/Maintenance/acr-cleanup-routemax.yaml)
+[build/Maintenance/acr-cleanup-myproduct.yaml](../../build/Maintenance/acr-cleanup-myproduct.yaml)
 runs exactly the sequence above: one Discover job per cluster, six Inventory shards, one Execute
 job. Create the pipeline definition from that file, run it manually with `operation: plan` a couple of
 times, then with `operation: untag-stale-tags` and `dryRun: false`, and only then enable the schedules. Each run
@@ -247,21 +247,21 @@ publishes the work-directory files above as the `report` artifact.
 ## 6. Post-cleanup validation
 
 After any real `untag-stale-tags`, `sweep-untagged-manifests` or `untag-and-sweep` run, verify that
-nothing actually running was broken. This is not optional colour: it is what would have caught the
-2026-09-06 incident (see [progress.md](./progress.md)) same-day instead of the next morning, and it
+nothing actually running was broken. This is not optional colour: it is what catches a broken
+image (for example a swept multi-arch child, RUNBOOK section 6) the same day instead of the next morning, and it
 takes minutes, not a production outage.
 
 ```bash
 # the one to run after every real cleanup: is everything ACTUALLY RUNNING still
 # fully pullable? Scoped to what is deployed, so it is fast.
-tools/audit-running-images.sh --config config/routemax.yaml
+tools/audit-running-images.sh --config config/myproduct.yaml
 
 # just the repositories a run touched, or that an incident already named
-tools/audit-running-images.sh --config config/routemax.yaml   --repositories routemax/keycloak,routemax/api,routemax/calculate-pse
+tools/audit-running-images.sh --config config/myproduct.yaml   --repositories myproduct/keycloak,myproduct/api,myproduct/calculate-pse
 
 # reuse the discovery a cleanup run just finished, in the same work-dir, instead
 # of discovering the clusters again (faster, but only as fresh as that run)
-tools/audit-running-images.sh --config config/routemax.yaml   --work-dir .acr-cleanup-work --skip-discover
+tools/audit-running-images.sh --config config/myproduct.yaml   --work-dir .acr-cleanup-work --skip-discover
 ```
 
 It checks every tag and digest the current cluster fleet depends on (running pods, workload
@@ -279,7 +279,7 @@ already discovered — no second live cluster crawl — and folds the result int
 report:
 
 ```bash
-./acr-cleanup.sh --config config/routemax.yaml --operation untag-stale-tags --no-dry-run \
+./acr-cleanup.sh --config config/myproduct.yaml --operation untag-stale-tags --no-dry-run \
   --validate-after --tag-groups pull_request_builds
 ```
 

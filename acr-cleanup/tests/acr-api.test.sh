@@ -110,16 +110,16 @@ echo "acr-api: scopes"
 check_equals "catalog scope" \
   "registry:catalog:*" "$(_acr_scope_for "" catalog)"
 check_equals "read scope is metadata_read + pull" \
-  "repository:routemax/api:metadata_read,pull" "$(_acr_scope_for routemax/api read)"
+  "repository:myproduct/api:metadata_read,pull" "$(_acr_scope_for myproduct/api read)"
 # A read-only run must never hold a delete-capable token.
 check_equals "write scope adds metadata_write and delete" \
-  "repository:routemax/api:metadata_read,metadata_write,delete,pull" \
-  "$(_acr_scope_for routemax/api write)"
+  "repository:myproduct/api:metadata_read,metadata_write,delete,pull" \
+  "$(_acr_scope_for myproduct/api write)"
 
 echo "acr-api: request handling"
 
 reset_stub '200|{"tags":[]}|'
-if acr_request GET "/acr/v1/routemax/api/_tags" read routemax/api; then
+if acr_request GET "/acr/v1/myproduct/api/_tags" read myproduct/api; then
   pass "2xx returns success"
 else
   fail_test "2xx returns success"
@@ -127,7 +127,7 @@ fi
 check_equals "status is recorded" "200" "$ACR_HTTP_STATUS"
 
 reset_stub '404|{"errors":[]}|'
-if acr_request GET "/acr/v1/routemax/api/_tags" read routemax/api; then
+if acr_request GET "/acr/v1/myproduct/api/_tags" read myproduct/api; then
   fail_test "404 returns failure"
 else
   pass "404 returns failure"
@@ -135,7 +135,7 @@ fi
 
 # A rejected token gets exactly one forced renewal, then the call proceeds.
 reset_stub '401||' '200|{"tags":[]}|'
-if acr_request GET "/acr/v1/routemax/api/_tags" read routemax/api; then
+if acr_request GET "/acr/v1/myproduct/api/_tags" read myproduct/api; then
   pass "401 triggers a token renewal and retries once"
 else
   fail_test "401 triggers a token renewal and retries once"
@@ -143,7 +143,7 @@ fi
 check_equals "401 retry used exactly two calls" "2" "$(stub_calls)"
 
 reset_stub '429||' '429||' '200|{"tags":[]}|'
-if acr_request GET "/acr/v1/routemax/api/_tags" read routemax/api; then
+if acr_request GET "/acr/v1/myproduct/api/_tags" read myproduct/api; then
   pass "429 is retried until success"
 else
   fail_test "429 is retried until success"
@@ -151,7 +151,7 @@ fi
 check_equals "429 retried up to the limit" "3" "$(stub_calls)"
 
 reset_stub '503||' '503||' '503||'
-if acr_request GET "/acr/v1/routemax/api/_tags" read routemax/api; then
+if acr_request GET "/acr/v1/myproduct/api/_tags" read myproduct/api; then
   fail_test "retries give up after ACR_MAX_RETRIES"
 else
   pass "retries give up after ACR_MAX_RETRIES"
@@ -160,7 +160,7 @@ check_equals "gave up after exactly ACR_MAX_RETRIES calls" "3" "$(stub_calls)"
 
 # 400 is a client error; retrying it just wastes the run.
 reset_stub '400||' '200|{"tags":[]}|'
-if acr_request GET "/acr/v1/routemax/api/_tags" read routemax/api; then
+if acr_request GET "/acr/v1/myproduct/api/_tags" read myproduct/api; then
   fail_test "400 is not retried"
 else
   pass "400 is not retried"
@@ -183,19 +183,19 @@ fi
 
 echo "acr-api: pagination"
 
-printf 'Link: </acr/v1/routemax/api/_tags?last=b&n=500>; rel="next"\r\n' \
+printf 'Link: </acr/v1/myproduct/api/_tags?last=b&n=500>; rel="next"\r\n' \
   > "${TMP_ROOT}/headers-link"
 check_equals "next link is parsed from the Link header" \
-  "/acr/v1/routemax/api/_tags?last=b&n=500" \
+  "/acr/v1/myproduct/api/_tags?last=b&n=500" \
   "$(_acr_parse_next_link "${TMP_ROOT}/headers-link")"
 
 check_equals "absent Link header yields no next page" \
   "" "$(_acr_parse_next_link "${TMP_ROOT}/headers-plain")"
 
 reset_stub \
-  '200|{"tags":[{"name":"a"},{"name":"b"}]}|Link: </acr/v1/routemax/api/_tags?last=b&n=500>; rel="next"\r\n' \
+  '200|{"tags":[{"name":"a"},{"name":"b"}]}|Link: </acr/v1/myproduct/api/_tags?last=b&n=500>; rel="next"\r\n' \
   '200|{"tags":[{"name":"c"}]}|'
-TAGS="$(acr_list_tags routemax/api)"
+TAGS="$(acr_list_tags myproduct/api)"
 check_equals "pages are concatenated" "3" "$(jq 'length' <<<"$TAGS")"
 check_equals "pagination stops when the Link header disappears" "2" "$(stub_calls)"
 check_equals "second page was requested from the Link URL" \
@@ -204,55 +204,55 @@ check_equals "second page was requested from the Link URL" \
 echo "acr-api: manifest reference graph"
 
 reset_stub '200|{"manifest":{"references":[{"digest":"sha256:child1"},{"digest":"sha256:child2"}]}}|'
-REFS="$(acr_manifest_references routemax/api sha256:parent)"; RC=$?
+REFS="$(acr_manifest_references myproduct/api sha256:parent)"; RC=$?
 check_equals "references are returned" "2" "$(jq 'length' <<<"$REFS")"
 check_equals "references return code" "0" "$RC"
 
 reset_stub '200|{"manifest":{}}|'
-REFS="$(acr_manifest_references routemax/api sha256:parent)"; RC=$?
+REFS="$(acr_manifest_references myproduct/api sha256:parent)"; RC=$?
 check_equals "a manifest with no references yields an empty array" "0" "$(jq 'length' <<<"$REFS")"
 check_equals "no references is still success" "0" "$RC"
 
 # Already deleted is "gone", which is a different answer from "cannot tell".
 reset_stub '404||'
-acr_manifest_references routemax/api sha256:parent >/dev/null 2>&1; RC=$?
+acr_manifest_references myproduct/api sha256:parent >/dev/null 2>&1; RC=$?
 check_equals "404 reports the manifest as already gone" "2" "$RC"
 
 # Fail closed: an unreadable graph must not look like "no children to protect".
 reset_stub '500||'
-acr_manifest_references routemax/api sha256:parent >/dev/null 2>&1; RC=$?
+acr_manifest_references myproduct/api sha256:parent >/dev/null 2>&1; RC=$?
 check_equals "unreadable reference graph fails closed" "1" "$RC"
 
 reset_stub '200|not json at all|'
-acr_manifest_references routemax/api sha256:parent >/dev/null 2>&1; RC=$?
+acr_manifest_references myproduct/api sha256:parent >/dev/null 2>&1; RC=$?
 check_equals "malformed reference graph fails closed" "1" "$RC"
 
 echo "acr-api: mutations"
 
 reset_stub '202||'
-if acr_untag routemax/api 1.2.3; then pass "untag succeeds on 202"; else fail_test "untag succeeds on 202"; fi
+if acr_untag myproduct/api 1.2.3; then pass "untag succeeds on 202"; else fail_test "untag succeeds on 202"; fi
 check_equals "untag uses DELETE on the tag path" \
-  "1" "$(stub_log_matches 'DELETE https://testacr.azurecr.io/acr/v1/routemax/api/_tags/1.2.3')"
+  "1" "$(stub_log_matches 'DELETE https://testacr.azurecr.io/acr/v1/myproduct/api/_tags/1.2.3')"
 
 # Already untagged is the desired end state, not an error.
 reset_stub '404||'
-if acr_untag routemax/api 1.2.3; then pass "untag treats 404 as already done"; else fail_test "untag treats 404 as already done"; fi
+if acr_untag myproduct/api 1.2.3; then pass "untag treats 404 as already done"; else fail_test "untag treats 404 as already done"; fi
 
 reset_stub '403||'
-if acr_untag routemax/api 1.2.3; then fail_test "untag fails on 403"; else pass "untag fails on 403"; fi
+if acr_untag myproduct/api 1.2.3; then fail_test "untag fails on 403"; else pass "untag fails on 403"; fi
 
 reset_stub '202||'
-if acr_delete_manifest routemax/api sha256:abc; then pass "manifest delete succeeds"; else fail_test "manifest delete succeeds"; fi
+if acr_delete_manifest myproduct/api sha256:abc; then pass "manifest delete succeeds"; else fail_test "manifest delete succeeds"; fi
 check_equals "manifest delete uses the v2 path" \
-  "1" "$(stub_log_matches 'DELETE https://testacr.azurecr.io/v2/routemax/api/manifests/sha256:abc')"
+  "1" "$(stub_log_matches 'DELETE https://testacr.azurecr.io/v2/myproduct/api/manifests/sha256:abc')"
 
 reset_stub '200||'
-acr_set_tag_attributes routemax/api 1.2.3 false false >/dev/null
+acr_set_tag_attributes myproduct/api 1.2.3 false false >/dev/null
 check_equals "lock sends both attributes as booleans" \
   "1" "$(stub_log_matches 'body={"writeEnabled":false,"deleteEnabled":false}')"
 
 reset_stub '200||'
-acr_set_manifest_attributes routemax/api sha256:abc true true >/dev/null
+acr_set_manifest_attributes myproduct/api sha256:abc true true >/dev/null
 check_equals "unlock sends true for both attributes" \
   "1" "$(stub_log_matches 'body={"writeEnabled":true,"deleteEnabled":true}')"
 
@@ -261,7 +261,7 @@ echo "acr-api: inventory shape"
 reset_stub \
   '200|{"tags":[{"name":"1.0.0","digest":"sha256:a","createdTime":"2026-01-01T00:00:00Z","lastUpdateTime":"2026-01-02T00:00:00Z","changeableAttributes":{"writeEnabled":false,"deleteEnabled":false}}]}|' \
   '200|{"manifests":[{"digest":"sha256:a","tags":["1.0.0"],"createdTime":"2026-01-01T00:00:00Z","lastUpdateTime":"2026-01-02T00:00:00Z","imageSize":1234,"mediaType":"application/vnd.oci.image.manifest.v1+json","changeableAttributes":{"writeEnabled":true,"deleteEnabled":true}}]}|'
-acr_inventory_repository routemax/api "${TMP_ROOT}/inv.json" 2>/dev/null
+acr_inventory_repository myproduct/api "${TMP_ROOT}/inv.json" 2>/dev/null
 
 check_equals "inventory records the tag" \
   "1.0.0" "$(jq -r '.tags[0].name' "${TMP_ROOT}/inv.json")"
@@ -277,7 +277,7 @@ check_equals "an ordinary manifest costs no extra lookup" \
 # The incident this whole block guards against: ACR's bulk _manifests listing
 # never actually populates `references` for an index or manifest list - it
 # comes back `[]` even when the index genuinely has children - confirmed live
-# against rmxacrcommon on 2026-09-06 after that gap let the sweep delete the
+# against myregistry on 2026-09-06 after that gap let the sweep delete the
 # platform manifest and attestation manifest of two still-tagged, still-
 # deployed keycloak images. The real list is only ever returned by a per-digest
 # GET, so inventory now fetches it for every index/manifest-list entry.
@@ -285,11 +285,11 @@ reset_stub \
   '200|{"tags":[]}|' \
   '200|{"manifests":[{"digest":"sha256:idx","tags":["1.0.0"],"mediaType":"application/vnd.oci.image.index.v1+json","references":[]}]}|' \
   '200|{"manifest":{"references":[{"digest":"sha256:amd64"},{"digest":"sha256:arm64"}]}}|'
-acr_inventory_repository routemax/api "${TMP_ROOT}/inv-idx.json" 2>/dev/null
+acr_inventory_repository myproduct/api "${TMP_ROOT}/inv-idx.json" 2>/dev/null
 check_equals "index children are resolved via a per-digest lookup, since the bulk listing never carries them" \
   "sha256:amd64 sha256:arm64" "$(jq -r '.manifests[0].references | join(" ")' "${TMP_ROOT}/inv-idx.json")"
 check_equals "the per-digest lookup targets the index digest" \
-  "1" "$(stub_log_matches 'GET https://testacr.azurecr.io/acr/v1/routemax/api/_manifests/sha256:idx ')"
+  "1" "$(stub_log_matches 'GET https://testacr.azurecr.io/acr/v1/myproduct/api/_manifests/sha256:idx ')"
 
 # Even when the bulk API claims something for `references` (past behaviour, or
 # a future ACR change), the resolved graph always wins - a stale or partial
@@ -298,7 +298,7 @@ reset_stub \
   '200|{"tags":[]}|' \
   '200|{"manifests":[{"digest":"sha256:idx","tags":["1.0.0"],"mediaType":"application/vnd.docker.distribution.manifest.list.v2+json","references":[{"digest":"sha256:stale-bulk-value"}]}]}|' \
   '200|{"manifest":{"references":[{"digest":"sha256:amd64"}]}}|'
-acr_inventory_repository routemax/api "${TMP_ROOT}/inv-list.json" 2>/dev/null
+acr_inventory_repository myproduct/api "${TMP_ROOT}/inv-list.json" 2>/dev/null
 check_equals "the resolved reference graph replaces whatever the bulk listing claimed" \
   "sha256:amd64" "$(jq -r '.manifests[0].references | join(" ")' "${TMP_ROOT}/inv-list.json")"
 
@@ -308,7 +308,7 @@ reset_stub \
   '200|{"tags":[]}|' \
   '200|{"manifests":[{"digest":"sha256:idx","tags":["1.0.0"],"mediaType":"application/vnd.oci.image.index.v1+json","references":[]}]}|' \
   '404||'
-acr_inventory_repository routemax/api "${TMP_ROOT}/inv-gone.json" 2>/dev/null
+acr_inventory_repository myproduct/api "${TMP_ROOT}/inv-gone.json" 2>/dev/null
 check_equals "an index gone by the time of the lookup resolves to no children, not a failure" \
   "0" "$(jq -r '.manifests[0].references | length' "${TMP_ROOT}/inv-gone.json")"
 
@@ -319,10 +319,10 @@ reset_stub \
   '200|{"tags":[]}|' \
   '200|{"manifests":[{"digest":"sha256:idx","tags":["1.0.0"],"mediaType":"application/vnd.oci.image.index.v1+json","references":[]}]}|' \
   '500||' '500||' '500||'
-( acr_inventory_repository routemax/api "${TMP_ROOT}/inv-unreadable.json" ) >/dev/null 2>"${TMP_ROOT}/backfill.err"; RC=$?
+( acr_inventory_repository myproduct/api "${TMP_ROOT}/inv-unreadable.json" ) >/dev/null 2>"${TMP_ROOT}/backfill.err"; RC=$?
 check_equals "an unreadable reference graph fails the inventory rather than recording it empty" "1" "$RC"
 check_equals "the failure names the manifest it could not resolve" \
-  "1" "$(grep -c 'reference graph for routemax/api@sha256:idx' "${TMP_ROOT}/backfill.err")"
+  "1" "$(grep -c 'reference graph for myproduct/api@sha256:idx' "${TMP_ROOT}/backfill.err")"
 check_equals "no half-written inventory file is left behind" \
   "false" "$([[ -f "${TMP_ROOT}/inv-unreadable.json" ]] && echo true || echo false)"
 
@@ -331,7 +331,7 @@ check_equals "no half-written inventory file is left behind" \
 reset_stub \
   '200|{"tags":[{"name":"2.0.0","digest":"sha256:b"}]}|' \
   '200|{"manifests":[{"digest":"sha256:b"}]}|'
-acr_inventory_repository routemax/api "${TMP_ROOT}/inv2.json" 2>/dev/null
+acr_inventory_repository myproduct/api "${TMP_ROOT}/inv2.json" 2>/dev/null
 check_equals "missing attributes default to write_enabled true" \
   "true" "$(jq -r '.tags[0].write_enabled' "${TMP_ROOT}/inv2.json")"
 check_equals "missing attributes default to delete_enabled true" \
@@ -351,19 +351,19 @@ echo "acr-api: targeted inventory"
 
 # Catalog, then tags + manifests for each of the two requested repositories.
 reset_stub \
-  '200|{"repositories":["routemax/api","routemax/ui","tools/kubectl"]}|' \
+  '200|{"repositories":["myproduct/api","myproduct/ui","tools/kubectl"]}|' \
   '200|{"tags":[{"name":"1.0.0","digest":"sha256:a"}]}|' '200|{"manifests":[]}|' \
   '200|{"tags":[{"name":"2.0.0","digest":"sha256:b"}]}|' '200|{"manifests":[]}|'
 mkdir -p "${TMP_ROOT}/targeted"
-( acr_inventory_all "${TMP_ROOT}/targeted" "routemax/api,routemax/ui" ) >/dev/null 2>&1; RC=$?
+( acr_inventory_all "${TMP_ROOT}/targeted" "myproduct/api,myproduct/ui" ) >/dev/null 2>&1; RC=$?
 check_equals "targeted inventory succeeds" "0" "$RC"
 check_equals "only the named repositories are inventoried" \
   "2" "$(jq '.totals.repositories' "${TMP_ROOT}/targeted/inventory.json")"
 check_equals "the catalog is still read once, to validate names" \
   "1" "$(stub_log_matches '_catalog')"
 
-reset_stub '200|{"repositories":["routemax/api"]}|'
-if ( acr_inventory_all "${TMP_ROOT}/targeted" "routemax/api,routemax/typo" ) >/dev/null 2>&1; then
+reset_stub '200|{"repositories":["myproduct/api"]}|'
+if ( acr_inventory_all "${TMP_ROOT}/targeted" "myproduct/api,myproduct/typo" ) >/dev/null 2>&1; then
   fail_test "an unknown repository name fails instead of inventorying nothing"
 else
   pass "an unknown repository name fails instead of inventorying nothing"
@@ -386,7 +386,7 @@ check_equals "large fixture exceeds a typical ARG_MAX" \
 reset_stub \
   "200|{\"tags\":${LARGE_TAGS}}|" \
   '200|{"manifests":[]}|'
-if acr_inventory_repository routemax/ui "${TMP_ROOT}/inv-large.json" 2>/dev/null; then
+if acr_inventory_repository myproduct/ui "${TMP_ROOT}/inv-large.json" 2>/dev/null; then
   pass "large repository inventory succeeds"
 else
   fail_test "large repository inventory succeeds"
@@ -440,7 +440,7 @@ ACR_TRANSPORT_FN=stub_by_url
 
 MANY_INDICES="$(jq -nc '[range(1; 13) | {digest: "sha256:idx-\(.)", tags: ["\(.).0.0"], mediaType: "application/vnd.oci.image.index.v1+json", references: []}]')"
 reset_stub '200|{"tags":[]}|' "200|{\"manifests\":${MANY_INDICES}}|"
-acr_inventory_repository routemax/api "${TMP_ROOT}/inv-parallel.json" 2>/dev/null
+acr_inventory_repository myproduct/api "${TMP_ROOT}/inv-parallel.json" 2>/dev/null
 check_equals "every index is resolved when lookups run in parallel" \
   "12" "$(jq '[.manifests[] | select(.references | length == 2)] | length' "${TMP_ROOT}/inv-parallel.json")"
 check_equals "each index gets its own children, not a neighbour's" \
@@ -454,10 +454,10 @@ check_equals "each index costs exactly one lookup" \
 # replay the call by hand.
 FORBIDDEN_MIX="$(jq -nc '[range(1; 4) | {digest: "sha256:idx-\(.)", tags: [], mediaType: "application/vnd.oci.image.index.v1+json", references: []}] + [{digest: "sha256:idx-forbidden", tags: [], mediaType: "application/vnd.oci.image.index.v1+json", references: []}]')"
 reset_stub '200|{"tags":[]}|' "200|{\"manifests\":${FORBIDDEN_MIX}}|"
-( acr_inventory_repository routemax/api "${TMP_ROOT}/inv-forbidden.json" ) >/dev/null 2>"${TMP_ROOT}/forbidden.err"; RC=$?
+( acr_inventory_repository myproduct/api "${TMP_ROOT}/inv-forbidden.json" ) >/dev/null 2>"${TMP_ROOT}/forbidden.err"; RC=$?
 check_equals "one unreadable index still fails the whole repository" "1" "$RC"
 check_equals "the failure reports the HTTP status that came back" \
-  "1" "$(grep -c 'routemax/api@sha256:idx-forbidden: HTTP 403' "${TMP_ROOT}/forbidden.err")"
+  "1" "$(grep -c 'myproduct/api@sha256:idx-forbidden: HTTP 403' "${TMP_ROOT}/forbidden.err")"
 check_equals "the failure reports how many lookups had succeeded" \
   "1" "$(grep -c 'after resolving [0-9]*/4' "${TMP_ROOT}/forbidden.err")"
 ACR_TRANSPORT_FN=stub_transport
@@ -471,20 +471,20 @@ echo "acr-api: inventory merge safety"
 # inventory and fails closed if any of them is missing from what got merged.
 mkdir -p "${TMP_ROOT}/merge-safety/inventory"
 cat > "${TMP_ROOT}/merge-safety/inventory/one.json" <<'JSON'
-{"repository":"routemax/api","tags":[],"manifests":[]}
+{"repository":"myproduct/api","tags":[],"manifests":[]}
 JSON
 cat > "${TMP_ROOT}/merge-safety/inventory/two.json" <<'JSON'
-{"repository":"routemax/ui","tags":[],"manifests":[]}
+{"repository":"myproduct/ui","tags":[],"manifests":[]}
 JSON
 
-( acr_inventory_merge "${TMP_ROOT}/merge-safety" '["routemax/api","routemax/ui"]' ) >/dev/null 2>&1; RC=$?
+( acr_inventory_merge "${TMP_ROOT}/merge-safety" '["myproduct/api","myproduct/ui"]' ) >/dev/null 2>&1; RC=$?
 check_equals "merge succeeds when every expected repository is present" "0" "$RC"
 
-( acr_inventory_merge "${TMP_ROOT}/merge-safety" '["routemax/api","routemax/ui","routemax/missing"]' ) \
+( acr_inventory_merge "${TMP_ROOT}/merge-safety" '["myproduct/api","myproduct/ui","myproduct/missing"]' ) \
   >/dev/null 2>"${TMP_ROOT}/merge-missing.err"; RC=$?
 check_equals "merge fails closed when an expected repository never landed" "1" "$RC"
 check_equals "the failure names the missing repository" \
-  "1" "$(grep -c 'routemax/missing' "${TMP_ROOT}/merge-missing.err")"
+  "1" "$(grep -c 'myproduct/missing' "${TMP_ROOT}/merge-missing.err")"
 
 ( acr_inventory_merge "${TMP_ROOT}/merge-safety" ) >/dev/null 2>&1; RC=$?
 check_equals "omitting the expected-repositories argument keeps the old, unchecked behaviour" "0" "$RC"

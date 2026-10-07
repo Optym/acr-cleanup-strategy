@@ -321,7 +321,7 @@ _dk8s_helm_release_entries() {
   return 0
 }
 
-# Releases are read in parallel because this phase dominates discovery: RouteMAX
+# Releases are read in parallel because this phase dominates discovery: MyProduct
 # runs a namespace per tenant, so a cluster is dozens of releases times up to
 # keep_helm_revisions manifest reads. Every read is read-only and each worker owns
 # its own output file, so ordering and correctness are unaffected; only the log

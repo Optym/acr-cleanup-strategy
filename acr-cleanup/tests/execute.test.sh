@@ -79,13 +79,13 @@ write_plan() {
   mkdir -p "$work"
   jq -n '{
     protection: { tags: 1, digests: 0 },
-    untag: [ range(10) | { repository: "routemax/api", tag: ("5.6.0-PullRequest\(.).1" + (if . == 4 then "-fails" else "" end)), digest: ("sha256:\(.)"), tag_group: "pull_request_builds", age_days: (100 - .), size: 10 } ],
+    untag: [ range(10) | { repository: "myproduct/api", tag: ("5.6.0-PullRequest\(.).1" + (if . == 4 then "-fails" else "" end)), digest: ("sha256:\(.)"), tag_group: "pull_request_builds", age_days: (100 - .), size: 10 } ],
     manifests: [
-      { repository: "routemax/api", digest: "sha256:ok-1",     age_days: 30, size: 100 },
-      { repository: "routemax/api", digest: "sha256:ok-2",     age_days: 30, size: 100 },
-      { repository: "routemax/api", digest: "sha256:retagged", age_days: 30, size: 100 },
-      { repository: "routemax/api", digest: "sha256:locked",   age_days: 30, size: 100 },
-      { repository: "routemax/api", digest: "sha256:gone",     age_days: 30, size: 100 }
+      { repository: "myproduct/api", digest: "sha256:ok-1",     age_days: 30, size: 100 },
+      { repository: "myproduct/api", digest: "sha256:ok-2",     age_days: 30, size: 100 },
+      { repository: "myproduct/api", digest: "sha256:retagged", age_days: 30, size: 100 },
+      { repository: "myproduct/api", digest: "sha256:locked",   age_days: 30, size: 100 },
+      { repository: "myproduct/api", digest: "sha256:gone",     age_days: 30, size: 100 }
     ]
   }' > "${work}/plan.json"
 }
@@ -149,9 +149,9 @@ check_equals "still-untagged manifests are deleted" "2" "$(grep -c '^delete ' "$
 check_equals "manifests re-tagged or locked since the plan are skipped" \
   "2" "$(status_count skipped:changed-since-plan "$W")"
 check_equals "a manifest re-tagged since the plan is not deleted" \
-  "0" "$(grep -c '^delete routemax/api sha256:retagged$' "$CALLS")"
+  "0" "$(grep -c '^delete myproduct/api sha256:retagged$' "$CALLS")"
 check_equals "a manifest locked since the plan is skipped" \
-  "0" "$(grep -c '^delete routemax/api sha256:locked$' "$CALLS")"
+  "0" "$(grep -c '^delete myproduct/api sha256:locked$' "$CALLS")"
 check_equals "an already-deleted manifest is reported as gone" "1" "$(status_count already-gone "$W")"
 check_equals "no tag is touched during a sweep" "0" "$(grep -c '^untag ' "$CALLS")"
 

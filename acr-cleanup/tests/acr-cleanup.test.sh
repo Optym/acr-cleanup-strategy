@@ -70,7 +70,7 @@ write_fixture() {   # work_dir
   mkdir -p "$work"
   jq -n --arg t1 "$(ts 1)" --arg t30 "$(ts 30)" '{
     generated_at: "x", registry: "testacr",
-    repositories: [ { repository: "routemax/api",
+    repositories: [ { repository: "myproduct/api",
       tags: [
         { name: "5.6.0-PullRequest1.1", digest: "sha256:a", created: $t1, modified: $t1, write_enabled: true, delete_enabled: true },
         { name: "5.6.0-PullRequest2.1", digest: "sha256:b", created: $t30, modified: $t30, write_enabled: true, delete_enabled: true }
@@ -85,7 +85,7 @@ write_fixture() {   # work_dir
   jq -n '{
     generated_at: "x", registry: "testacr",
     clusters: [ { cluster: "test-aks", status: "ok", required: true, error: null, entry_count: 0 } ],
-    protected_tags: [], protected_digests: [ { repository: "routemax/api", digest: "sha256:zzz-not-a-real-tag" } ],
+    protected_tags: [], protected_digests: [ { repository: "myproduct/api", digest: "sha256:zzz-not-a-real-tag" } ],
     sources: [], suspect_hosts: [], unlisted_clusters: []
   }' > "${work}/protection-set.json"
 }

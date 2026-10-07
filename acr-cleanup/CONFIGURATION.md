@@ -1,7 +1,7 @@
 # Configuration reference
 
 Every option in `config/<product>.yaml`, with its default, the values it accepts, and what it changes.
-The shipped RouteMAX config is [config/routemax.yaml](./config/routemax.yaml); the annotated template
+The shipped MyProduct config is [config/myproduct.yaml](./config/myproduct.yaml); the annotated template
 for a new product is [config/example.yaml](./config/example.yaml).
 
 How the config is loaded (all in [lib/config.sh](./lib/config.sh)):
@@ -16,8 +16,8 @@ The effective config is written to `<work-dir>/config.json`, validated, and its 
 every report so a run can always be reproduced.
 
 ```bash
-./acr-cleanup.sh --config config/routemax.yaml --operation validate-config   # validate only
-./acr-cleanup.sh --config config/routemax.yaml --print-config | jq .         # show the effective config
+./acr-cleanup.sh --config config/myproduct.yaml --operation validate-config   # validate only
+./acr-cleanup.sh --config config/myproduct.yaml --print-config | jq .         # show the effective config
 ```
 
 ## Override syntax
@@ -43,11 +43,11 @@ because they silently match nothing under ERE. Unanchored patterns load with a w
 
 | Key | Default | Required | Meaning |
 | --- | --- | --- | --- |
-| `name` | — | yes | ACR name, e.g. `rmxacrcommon`. The login server is `<name>.azurecr.io` |
+| `name` | — | yes | ACR name, e.g. `myregistry`. The login server is `<name>.azurecr.io` |
 | `resource_group` | — | yes | Resource group of the registry. Used by `az acr show-usage` for storage numbers |
 | `subscription_id` | — | yes | Subscription of the registry |
 | `service_connection` | `""` | no | Informational: the ADO service connection the pipeline uses for the registry. The pipeline wrapper is where it actually takes effect |
-| `host_aliases` | `[]` | no | Other hostnames that mean this registry when seen in a pod spec, e.g. `rmxacrcommon.westus2.data.azurecr.io`. Images under an unlisted lookalike host are reported as `suspect_hosts` and are **not** protected |
+| `host_aliases` | `[]` | no | Other hostnames that mean this registry when seen in a pod spec, e.g. `myregistry.westus2.data.azurecr.io`. Images under an unlisted lookalike host are reported as `suspect_hosts` and are **not** protected |
 
 ## `never_delete`
 
@@ -58,7 +58,7 @@ Repositories and tag patterns that are never cleaned but always reported.
 | `repositories[]` | `[]` | `{ name, reason }` or a plain string. Every tag and manifest in the repository is skipped with reason `never-delete:repository` |
 | `tag_patterns[]` | `[]` | `{ pattern, reason }` or a plain string. A matching tag is skipped with `never-delete:pattern`. Checked before the cleanup rules |
 
-RouteMAX keeps `^latest$`, plain `X.Y.Z`, `X.Y.Z-N` (setversion collision suffix) and `.*-donotdelete$`
+MyProduct keeps `^latest$`, plain `X.Y.Z`, `X.Y.Z-N` (setversion collision suffix) and `.*-donotdelete$`
 (the engineers' escape hatch).
 
 ## `image_cleanup_rules[]`
@@ -83,12 +83,12 @@ Ordering guidance: suffix-style markers (`-inUse$`) first, the broadest catch-al
 
 | Key | Default | Range | Meaning |
 | --- | --- | --- | --- |
-| `keep_helm_revisions` | `3` | 1–50 | Helm revisions per release whose images are protected (rollback targets). RouteMAX uses 5 |
+| `keep_helm_revisions` | `3` | 1–50 | Helm revisions per release whose images are protected (rollback targets). MyProduct uses 5 |
 | `min_untagged_manifest_age_days` | `14` | 7–365 | An untagged manifest is swept only after its `lastUpdateTime` is older than this. This is the recovery window; keep it at two run intervals or more. Below 14 warns |
 | `cluster_access_mode` | `kubectl` | `kubectl`, `aks_run_command` | How clusters are read. `kubectl` needs network line of sight to the API server and is read-only. `aks_run_command` works through private endpoints but needs `runcommand/action`, which allows arbitrary in-cluster commands |
 | `report_unlisted_clusters` | `true` | bool | Run `az aks list` per subscription and warn about clusters not in the list below. Reporting only; never blocks a run |
 | `helm_parallelism` | `6` | 1–20 | Helm releases read concurrently during discovery. Lower it if the API server throttles |
-| `protect_tag_across_repositories` | `false` | bool | When `true`, a tag name protected anywhere (by a live pod or Helm history, in any repository) is treated as protected in every repository that has a tag of the same name - see README.md, "Cross-repository tag protection". RouteMAX sets this `true` because `dispatch` and `ibplanning` are separate Helm charts that share one build-pipeline tag stream; a tenant can enable a dormant module on its existing pinned version at any time |
+| `protect_tag_across_repositories` | `false` | bool | When `true`, a tag name protected anywhere (by a live pod or Helm history, in any repository) is treated as protected in every repository that has a tag of the same name - see README.md, "Cross-repository tag protection". MyProduct sets this `true` because `dispatch` and `ibplanning` are separate Helm charts that share one build-pipeline tag stream; a tenant can enable a dormant module on its existing pinned version at any time |
 | `clusters[]` | `[]`, at least one | | Every cluster that pulls from the registry, see below |
 
 ### `in_use_protection.clusters[]`
@@ -131,7 +131,7 @@ Helm history, after a wait.
 | `lock_at_deploy.enabled` | `unlock_when_unused.enabled` | Behaviour |
 | --- | --- | --- |
 | true | true | Default. Locks converge to what is deployed |
-| true | false | Lock-only: locks accumulate forever (the old RouteMAX failure). Warns at load |
+| true | false | Lock-only: locks accumulate forever (the old MyProduct failure). Warns at load |
 | false | true | Unlock-only: drains a historical backlog without adding locks |
 | false | false | No lock layer; existing locks are still reported |
 

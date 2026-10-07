@@ -16,12 +16,12 @@
 #   2. Resolve its manifest's real reference graph with a per-digest GET
 #      (lib/acr-api.sh's acr_manifest_references - the same call the inventory
 #      fix uses, and the one the bulk _manifests listing cannot substitute
-#      for: see the 2026-09-06 incident in progress.md).
+#      for: see RUNBOOK.md section 6).
 #   3. If it is a multi-arch index / manifest list, confirm every child in
 #      that graph still resolves too.
 #
 # A tag gone, or a manifest gone, or an index child gone, is exactly the
-# failure mode that put routemax/keycloak into ImagePullBackOff: the pod is
+# failure mode that put myproduct/keycloak into ImagePullBackOff: the pod is
 # running an image that would no longer pull fresh. Anything reported BROKEN
 # here needs the same response as that incident - the image cannot be trusted
 # to survive a node replacement or a pod reschedule, whether or not the pod
@@ -60,14 +60,14 @@
 #
 # Examples:
 #   # whole fleet, fresh discovery
-#   tools/audit-running-images.sh --config config/routemax.yaml
+#   tools/audit-running-images.sh --config config/myproduct.yaml
 #
 #   # just the repositories affected by the last incident
-#   tools/audit-running-images.sh --config config/routemax.yaml \
-#     --repositories routemax/keycloak,routemax/api,routemax/calculate-pse
+#   tools/audit-running-images.sh --config config/myproduct.yaml \
+#     --repositories myproduct/keycloak,myproduct/api,myproduct/calculate-pse
 #
 #   # reuse the discovery a cleanup run just did, same work-dir
-#   tools/audit-running-images.sh --config config/routemax.yaml \
+#   tools/audit-running-images.sh --config config/myproduct.yaml \
 #     --work-dir .acr-cleanup-work --skip-discover
 
 set -uo pipefail

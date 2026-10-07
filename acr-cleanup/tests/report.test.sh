@@ -84,7 +84,7 @@ ts() { date -u -v-"$1"d '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -d "$1 days
 jq -n --arg t1 "$(ts 1)" --arg t30 "$(ts 30)" --arg t60 "$(ts 60)" --arg t400 "$(ts 400)" '{
   generated_at: "2026-09-04T00:00:00Z", registry: "testacr",
   repositories: [
-    { repository: "routemax/api",
+    { repository: "myproduct/api",
       tags: [
         { name: "5.6.0-PullRequest1.1", digest: "sha256:a", created: $t1,  modified: $t1,  write_enabled: true, delete_enabled: true },
         { name: "5.6.0-PullRequest2.1", digest: "sha256:b", created: $t30, modified: $t30, write_enabled: true, delete_enabled: true },
@@ -111,13 +111,13 @@ jq -n '{
   generated_at: "2026-09-04T00:00:00Z", registry: "testacr",
   clusters: [ { cluster: "test-aks", resource_group: "test-rg", required: true, status: "ok", error: null, entry_count: 1 },
               { cluster: "test-aks-2", resource_group: "test-rg", required: false, status: "unreachable", error: "could not list pods", entry_count: 0 } ],
-  protected_tags: [ { repository: "routemax/api", tag: "5.5.0-beta.1-1" } ],
+  protected_tags: [ { repository: "myproduct/api", tag: "5.5.0-beta.1-1" } ],
   protected_digests: [],
   sources: [
-    { repository: "routemax/api", tag: "5.5.0-beta.1-1", cluster: "test-aks", namespace: "prod", source: "pod", detail: "running" },
-    { repository: "routemax/api", tag: "5.4.0-beta.1-1", cluster: "test-aks", namespace: "prod", source: "helm-history", detail: "prod/api@rev5" }
+    { repository: "myproduct/api", tag: "5.5.0-beta.1-1", cluster: "test-aks", namespace: "prod", source: "pod", detail: "running" },
+    { repository: "myproduct/api", tag: "5.4.0-beta.1-1", cluster: "test-aks", namespace: "prod", source: "helm-history", detail: "prod/api@rev5" }
   ],
-  suspect_hosts: [ { host: "testacr.westus2.data.azurecr.io", repository: "routemax/api", cluster: "test-aks" } ],
+  suspect_hosts: [ { host: "testacr.westus2.data.azurecr.io", repository: "myproduct/api", cluster: "test-aks" } ],
   unlisted_clusters: [ { name: "test-aks-3", resource_group: "test-rg", location: "eastus" } ]
 }' > "${WORK}/protection-set.json"
 
@@ -158,9 +158,9 @@ check_equals "byte delta vs previous run" "-1100000000" "$(jq '.registry.delta_v
 
 echo "report: repositories"
 check_equals "cleaned repository shows deletions" \
-  "2" "$(jq '.repositories[] | select(.repository == "routemax/api") | .deleted' "$R")"
+  "2" "$(jq '.repositories[] | select(.repository == "myproduct/api") | .deleted' "$R")"
 check_equals "tags after per repository" \
-  "3" "$(jq '.repositories[] | select(.repository == "routemax/api") | .tags_after' "$R")"
+  "3" "$(jq '.repositories[] | select(.repository == "myproduct/api") | .tags_after' "$R")"
 check_equals "never-deleted repository is flagged" \
   "true" "$(jq '.repositories[] | select(.repository == "tools/kubectl") | .never_delete' "$R")"
 check_equals "never-deleted repository has no deletions" \
@@ -195,12 +195,12 @@ check_equals "warnings are rendered as text" "3" "$(jq '.warnings | length' "$R"
 
 echo "report: deployments (cluster/namespace/deployed/protected-previous)"
 check_equals "validation is null when --validate-after was not used" "null" "$(jq '.validation' "$R")"
-check_equals "one deployment group for test-aks/prod/routemax-api" \
-  "1" "$(jq '[.protection.deployments[] | select(.cluster=="test-aks" and .namespace=="prod" and .repository=="routemax/api")] | length' "$R")"
+check_equals "one deployment group for test-aks/prod/myproduct-api" \
+  "1" "$(jq '[.protection.deployments[] | select(.cluster=="test-aks" and .namespace=="prod" and .repository=="myproduct/api")] | length' "$R")"
 check_equals "deployed version is the running tag" \
-  "5.5.0-beta.1-1" "$(jq -r '.protection.deployments[] | select(.repository=="routemax/api") | .deployed[0]' "$R")"
+  "5.5.0-beta.1-1" "$(jq -r '.protection.deployments[] | select(.repository=="myproduct/api") | .deployed[0]' "$R")"
 check_equals "older helm-history tag stays protected as a previous version" \
-  "5.4.0-beta.1-1" "$(jq -r '.protection.deployments[] | select(.repository=="routemax/api") | .protected_previous[0]' "$R")"
+  "5.4.0-beta.1-1" "$(jq -r '.protection.deployments[] | select(.repository=="myproduct/api") | .protected_previous[0]' "$R")"
 
 echo "report: html"
 HS="${WORK}/report-summary.html"
@@ -245,7 +245,7 @@ echo "report: opt-in post-cleanup validation (--validate-after)"
 jq -n '{
   generated_at: "2026-09-04T00:00:00Z", skip_discover: true,
   totals: { checked: 5, ok: 4, broken: 1, unreadable: 0 },
-  items: [ { status: "BROKEN", repository: "routemax/api", tag: "5.5.0-beta.1-1", digest: "sha256:e", clusters: "test-aks", reason: "manifest-not-found" } ]
+  items: [ { status: "BROKEN", repository: "myproduct/api", tag: "5.5.0-beta.1-1", digest: "sha256:e", clusters: "test-aks", reason: "manifest-not-found" } ]
 }' > "${DRY}/validation-result.json"
 ( report_run "$DRY" untag ) >/dev/null 2>&1 || { echo "report_run (validation) failed"; exit 1; }
 check_equals "validation totals surface in result.json" "1" "$(jq '.validation.totals.broken' "${DRY}/result.json")"

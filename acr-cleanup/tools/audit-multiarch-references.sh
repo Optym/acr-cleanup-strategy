@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 #
-# Read-only audit for the incident documented in RUNBOOK.md section 6 and
-# progress.md's 2026-09-06 change log entry: find every currently-tagged
+# Read-only audit for the incident documented in RUNBOOK.md section 6: find every currently-tagged
 # multi-architecture image (an OCI image index or Docker manifest list) whose
 # child manifest is missing, which is invisible in the portal - the tag and
 # the index both still look completely normal - but breaks the pull the next

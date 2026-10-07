@@ -36,11 +36,11 @@ check_equals() {
 
 cat > "${TMP_ROOT}/config.yaml" <<'YAML'
 registry:
-  name: rmxacrcommon
+  name: myregistry
   resource_group: immortal-rg-eus
   subscription_id: 00000000-0000-0000-0000-000000000000
   host_aliases:
-    - rmxacrcommon.eastus.data.azurecr.io
+    - myregistry.eastus.data.azurecr.io
 image_cleanup_rules:
   - tag_group: pull_request_builds
     tag_pattern: '^[0-9]+\.[0-9]+\.[0-9]+-PullRequest[0-9]+\.'
@@ -65,9 +65,9 @@ parse_one() {
 
 echo "discover: image reference parsing"
 
-ENTRY="$(parse_one 'rmxacrcommon.azurecr.io/routemax/api:5.5.0-beta.1-136')"
+ENTRY="$(parse_one 'myregistry.azurecr.io/myproduct/api:5.5.0-beta.1-136')"
 check_equals "tagged image: repository" \
-  "routemax/api" "$(jq -r '.[0].repository' <<<"$ENTRY")"
+  "myproduct/api" "$(jq -r '.[0].repository' <<<"$ENTRY")"
 check_equals "tagged image: tag" \
   "5.5.0-beta.1-136" "$(jq -r '.[0].tag' <<<"$ENTRY")"
 check_equals "tagged image: matched as ours" \
@@ -75,31 +75,31 @@ check_equals "tagged image: matched as ours" \
 check_equals "tagged image: carries its namespace" \
   "test-ns" "$(jq -r '.[0].namespace' <<<"$ENTRY")"
 
-ENTRY="$(parse_one 'rmxacrcommon.azurecr.io/routemax/appointment-ai/web:1.2.3')"
+ENTRY="$(parse_one 'myregistry.azurecr.io/myproduct/appointment-ai/web:1.2.3')"
 check_equals "nested repository path is preserved" \
-  "routemax/appointment-ai/web" "$(jq -r '.[0].repository' <<<"$ENTRY")"
+  "myproduct/appointment-ai/web" "$(jq -r '.[0].repository' <<<"$ENTRY")"
 
-ENTRY="$(parse_one 'rmxacrcommon.azurecr.io/routemax/api@sha256:abc123')"
+ENTRY="$(parse_one 'myregistry.azurecr.io/myproduct/api@sha256:abc123')"
 check_equals "digest-pinned image: repository" \
-  "routemax/api" "$(jq -r '.[0].repository' <<<"$ENTRY")"
+  "myproduct/api" "$(jq -r '.[0].repository' <<<"$ENTRY")"
 check_equals "digest-pinned image: digest" \
   "sha256:abc123" "$(jq -r '.[0].digest' <<<"$ENTRY")"
 check_equals "digest-pinned image: carries no tag" \
   "null" "$(jq -r '.[0].tag // "null"' <<<"$ENTRY")"
 
-ENTRY="$(parse_one 'rmxacrcommon.azurecr.io/routemax/api:5.5.0@sha256:abc123')"
+ENTRY="$(parse_one 'myregistry.azurecr.io/myproduct/api:5.5.0@sha256:abc123')"
 check_equals "tag+digest form drops the tag and keeps the repository" \
-  "routemax/api" "$(jq -r '.[0].repository' <<<"$ENTRY")"
+  "myproduct/api" "$(jq -r '.[0].repository' <<<"$ENTRY")"
 
 # kubelet reports imageID with a runtime prefix; without stripping it the host
 # parses as "docker-pullable:" and the image looks foreign, i.e. unprotected.
-ENTRY="$(parse_one 'docker-pullable://rmxacrcommon.azurecr.io/routemax/ui@sha256:def456')"
+ENTRY="$(parse_one 'docker-pullable://myregistry.azurecr.io/myproduct/ui@sha256:def456')"
 check_equals "imageID runtime prefix is stripped" \
-  "routemax/ui" "$(jq -r '.[0].repository' <<<"$ENTRY")"
+  "myproduct/ui" "$(jq -r '.[0].repository' <<<"$ENTRY")"
 check_equals "imageID is still recognised as ours" \
   "registry" "$(jq -r '.[0].match' <<<"$ENTRY")"
 
-ENTRY="$(parse_one 'rmxacrcommon.azurecr.io/routemax/api')"
+ENTRY="$(parse_one 'myregistry.azurecr.io/myproduct/api')"
 check_equals "untagged reference defaults to latest" \
   "latest" "$(jq -r '.[0].tag' <<<"$ENTRY")"
 
@@ -113,13 +113,13 @@ ENTRY="$(parse_one 'mcr.microsoft.com/oss/kubernetes/ingress/nginx:1.2.3')"
 check_equals "MCR image is classified foreign" \
   "foreign" "$(jq -r '.[0].match' <<<"$ENTRY")"
 
-ENTRY="$(parse_one 'rmxacrcommon.eastus.data.azurecr.io/routemax/api:1.2.3')"
+ENTRY="$(parse_one 'myregistry.eastus.data.azurecr.io/myproduct/api:1.2.3')"
 check_equals "configured host alias counts as ours" \
   "registry" "$(jq -r '.[0].match' <<<"$ENTRY")"
 
 # The dangerous case: looks like our registry, is not in host_aliases, so it would
 # not be protected. It must surface as a warning rather than be silently dropped.
-ENTRY="$(parse_one 'rmxacrcommon.westus2.data.azurecr.io/routemax/api:1.2.3')"
+ENTRY="$(parse_one 'myregistry.westus2.data.azurecr.io/myproduct/api:1.2.3')"
 check_equals "unlisted lookalike host is flagged as suspect" \
   "suspect_host" "$(jq -r '.[0].match' <<<"$ENTRY")"
 
@@ -135,16 +135,16 @@ cat > "${TMP_ROOT}/pods.json" <<'JSON'
     {
       "metadata": { "namespace": "prod-01" },
       "spec": {
-        "initContainers": [ { "image": "rmxacrcommon.azurecr.io/routemax/etl:1.0.0" } ],
+        "initContainers": [ { "image": "myregistry.azurecr.io/myproduct/etl:1.0.0" } ],
         "containers": [
-          { "image": "rmxacrcommon.azurecr.io/routemax/api:5.5.0-beta.1-136" },
+          { "image": "myregistry.azurecr.io/myproduct/api:5.5.0-beta.1-136" },
           { "image": "ghcr.io/kedacore/keda:2.14.0" }
         ],
-        "ephemeralContainers": [ { "image": "rmxacrcommon.azurecr.io/tools/kubectl:1.31.8" } ]
+        "ephemeralContainers": [ { "image": "myregistry.azurecr.io/tools/kubectl:1.31.8" } ]
       },
       "status": {
         "containerStatuses": [
-          { "imageID": "docker-pullable://rmxacrcommon.azurecr.io/routemax/api@sha256:aaa" }
+          { "imageID": "docker-pullable://myregistry.azurecr.io/myproduct/api@sha256:aaa" }
         ]
       }
     },
@@ -152,7 +152,7 @@ cat > "${TMP_ROOT}/pods.json" <<'JSON'
       "metadata": { "namespace": "prod-02" },
       "spec": {
         "containers": [
-          { "image": "rmxacrcommon.azurecr.io/routemax/api:6.0.0-beta.1-1" }
+          { "image": "myregistry.azurecr.io/myproduct/api:6.0.0-beta.1-1" }
         ]
       }
     }
@@ -164,17 +164,17 @@ ENTRIES="$(_dk8s_refs_from_kubectl_json < "${TMP_ROOT}/pods.json" \
   | _dk8s_refs_to_entries test-aks pod running)"
 
 check_equals "initContainers are collected" \
-  "1" "$(jq '[.[] | select(.repository=="routemax/etl")] | length' <<<"$ENTRIES")"
+  "1" "$(jq '[.[] | select(.repository=="myproduct/etl")] | length' <<<"$ENTRIES")"
 check_equals "ephemeralContainers are collected" \
   "1" "$(jq '[.[] | select(.repository=="tools/kubectl")] | length' <<<"$ENTRIES")"
 check_equals "imageID digests are collected alongside tags" \
-  "1" "$(jq '[.[] | select(.repository=="routemax/api" and has("digest"))] | length' <<<"$ENTRIES")"
+  "1" "$(jq '[.[] | select(.repository=="myproduct/api" and has("digest"))] | length' <<<"$ENTRIES")"
 check_equals "third-party image is kept out of the protected set" \
   "0" "$(jq '[.[] | select(.match=="registry" and .repository=="kedacore/keda")] | length' <<<"$ENTRIES")"
 check_equals "each item's images are attributed to its own namespace" \
-  "prod-01" "$(jq -r '[.[] | select(.repository=="routemax/etl")][0].namespace' <<<"$ENTRIES")"
+  "prod-01" "$(jq -r '[.[] | select(.repository=="myproduct/etl")][0].namespace' <<<"$ENTRIES")"
 check_equals "a second pod in a different namespace keeps its own namespace" \
-  "prod-02" "$(jq -r '[.[] | select(.repository=="routemax/api" and .tag=="6.0.0-beta.1-1")][0].namespace' <<<"$ENTRIES")"
+  "prod-02" "$(jq -r '[.[] | select(.repository=="myproduct/api" and .tag=="6.0.0-beta.1-1")][0].namespace' <<<"$ENTRIES")"
 
 echo "discover: helm manifest extraction"
 
@@ -186,11 +186,11 @@ spec:
     spec:
       containers:
         - name: api
-          image: "rmxacrcommon.azurecr.io/routemax/api:5.5.0-beta.1-135"
+          image: "myregistry.azurecr.io/myproduct/api:5.5.0-beta.1-135"
         - name: sidecar
-          image: 'rmxacrcommon.azurecr.io/routemax/etl:5.5.0-beta.1-135'
+          image: 'myregistry.azurecr.io/myproduct/etl:5.5.0-beta.1-135'
         - name: plain
-          image: rmxacrcommon.azurecr.io/routemax/ui:5.5.0-beta.1-135
+          image: myregistry.azurecr.io/myproduct/ui:5.5.0-beta.1-135
 YAML
 
 ENTRIES="$(_dk8s_refs_from_helm_manifest < "${TMP_ROOT}/manifest.yaml" \
@@ -219,7 +219,7 @@ cat > "${TMP_ROOT}/ok.json" <<'JSON'
   "cluster": "test-aks", "resource_group": "test-rg", "required": true,
   "status": "ok", "error": null,
   "entries": [
-    { "host": "rmxacrcommon.azurecr.io", "repository": "routemax/api", "tag": "1.0.0", "match": "registry", "cluster": "test-aks", "namespace": "prod-01", "source": "pod", "detail": "running" }
+    { "host": "myregistry.azurecr.io", "repository": "myproduct/api", "tag": "1.0.0", "match": "registry", "cluster": "test-aks", "namespace": "prod-01", "source": "pod", "detail": "running" }
   ],
   "suspect_hosts": [], "foreign_count": 0, "unlisted_clusters": []
 }
@@ -295,9 +295,9 @@ _dk8s_run() {
   shift 2
   case "$*" in
     "kubectl get pods"*)
-      jq -nc '{ items: [ range(30000) | { spec: { containers: [ { image: ("rmxacrcommon.azurecr.io/routemax/svc\(. % 40):5.6.0-PullRequest\(.).1") } ] } } ] }' ;;
+      jq -nc '{ items: [ range(30000) | { spec: { containers: [ { image: ("myregistry.azurecr.io/myproduct/svc\(. % 40):5.6.0-PullRequest\(.).1") } ] } } ] }' ;;
     "kubectl get deployments"*)
-      printf '{"items":[{"spec":{"template":{"spec":{"containers":[{"image":"rmxacrcommon.azurecr.io/routemax/api:1.0.0"}]}}}}]}' ;;
+      printf '{"items":[{"spec":{"template":{"spec":{"containers":[{"image":"myregistry.azurecr.io/myproduct/api:1.0.0"}]}}}}]}' ;;
     "helm list"*)
       printf '[{"name":"rel","namespace":"ns"},{"name":"gone","namespace":"ns"}]' ;;
     "helm history gone"*)
@@ -306,7 +306,7 @@ _dk8s_run() {
       [[ -f "$STUB_HELM_FAIL" ]] && return 1
       printf '[{"revision":1},{"revision":2}]' ;;
     "helm get manifest"*)
-      printf 'kind: Deployment\nspec:\n  template:\n    spec:\n      containers:\n        - image: rmxacrcommon.azurecr.io/routemax/api:0.9.0\n' ;;
+      printf 'kind: Deployment\nspec:\n  template:\n    spec:\n      containers:\n        - image: myregistry.azurecr.io/myproduct/api:0.9.0\n' ;;
     *) return 1 ;;
   esac
 }

@@ -2,7 +2,7 @@
 
 How to use this ACR cleanup approach for another product (DockAi, ODP, LiveHaul, Ocomo, …).
 
-Nothing in `lib/` or `deploy/` is RouteMAX-specific. Adopting the module means: copy the folder,
+Nothing in `lib/` or `deploy/` is product-specific. Adopting the module means: copy the folder,
 write one config file, add one pipeline wrapper, wire one deploy-time step.
 
 Start by reading [README.md](./README.md) for the architecture and [USER_GUIDE.md](./USER_GUIDE.md)
@@ -31,9 +31,9 @@ ever pinned and every environment redeploys frequently.
 | --- | --- |
 | Tools on the agent | bash 4.4+, `az`, `jq`, `curl`, `kubectl`, `helm`, and either `yq` or `python3` with PyYAML |
 | ACR | Any tier. Premium if you want geo-replication |
-| Soft delete | Enable it **if your registry supports it**: `az acr config soft-delete update -r <acr> --status enabled --days 7`. It is **not compatible with geo-replicated or zone-redundant registries** (RouteMAX cannot use it) — see [the recovery window](#41-recovery-window-when-soft-delete-is-unavailable) |
+| Soft delete | Enable it **if your registry supports it**: `az acr config soft-delete update -r <acr> --status enabled --days 7`. It is **not compatible with geo-replicated or zone-redundant registries** (MyProduct cannot use it) — see [the recovery window](#41-recovery-window-when-soft-delete-is-unavailable) |
 | Service connections | One Azure service connection **per subscription** that hosts a consuming cluster |
-| Agent pool | Prefer a pool with network line of sight to your API servers. RouteMAX uses `RouteMax-Agents-OnPrem-Linux` |
+| Agent pool | Prefer a pool with network line of sight to your API servers. MyProduct uses `Onprem-Linux-Agents` |
 
 ### Permissions
 
@@ -65,11 +65,11 @@ subscription.
 
 ```bash
 # from your repo root
-cp -r <path-to>/RouteMAX/devops/acr-cleanup devops/acr-cleanup
+cp -r <path-to>/acr-cleanup devops/acr-cleanup
 cp devops/acr-cleanup/config/example.yaml devops/acr-cleanup/config/<product>.yaml
 ```
 
-Delete `config/routemax.yaml` if you do not need it as a reference.
+Delete `config/myproduct.yaml` if you do not need it as a reference.
 
 Overrides use a dotted path, and rules are addressable by name rather than index (index-based
 overrides break when somebody reorders the list):
@@ -289,7 +289,7 @@ The two flags are independent:
 | `lock_at_deploy` | `unlock_when_unused` | Behaviour |
 | --- | --- | --- |
 | `true` | `true` | **Default.** Self-healing; locks converge to what is deployed |
-| `true` | `false` | Lock-only — the anti-pattern that caused the RouteMAX bloat. Observation during migration only |
+| `true` | `false` | Lock-only — the anti-pattern that caused the MyProduct bloat. Observation during migration only |
 | `false` | `true` | Unlock-only — useful for draining a historical lock backlog without adding new locks |
 | `false` | `false` | No lock layer; L1, L2 and the floors still apply. Existing locks are still reported |
 
@@ -398,8 +398,6 @@ Do not skip ahead. Each phase is gated on a clean report from the previous one.
 | 6 | Enable untagged-manifest sweep | This is where storage actually drops |
 | 7 | Decommission the old ACR tasks / scripts | Keep them disabled for one cycle before deleting |
 
-Track it in your own copy of [progress.md](./progress.md).
-
 ---
 
 ## 8. Reading a dry-run report
@@ -445,7 +443,7 @@ Work through it in this order:
 
 ## 10. Anti-patterns
 
-These are all real failures from the previous RouteMAX implementations. Do not reintroduce them.
+These are all real failures from the previous MyProduct implementations. Do not reintroduce them.
 
 | Anti-pattern | Why it fails |
 | --- | --- |
@@ -464,6 +462,4 @@ These are all real failures from the previous RouteMAX implementations. Do not r
 
 ## 11. Getting help
 
-Open a work item in the DevOps area path for your product and link it to
-[US 281954](https://dev.azure.com/optym/PlatformEngineering/_workitems/edit/281954) as *Related*, so
-improvements flow back into the shared module.
+Open an issue or pull request upstream so improvements flow back into the shared module.

@@ -23,7 +23,7 @@
 # warning: continueOnError in the release step).
 #
 # Usage:
-#   deploy/lock-deployed-images.sh --config config/routemax.yaml \
+#   deploy/lock-deployed-images.sh --config config/myproduct.yaml \
 #     --environment "$(Release.EnvironmentName)" --manifest-file helm_template.yaml
 #
 # The file can also be sourced for tests; main runs only when executed.
