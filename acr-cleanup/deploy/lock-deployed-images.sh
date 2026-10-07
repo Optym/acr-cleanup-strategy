@@ -42,6 +42,7 @@ source "${LOCK_MODULE_DIR}/lib/discover-k8s.sh"
 # shellcheck source=../lib/acr-api.sh
 source "${LOCK_MODULE_DIR}/lib/acr-api.sh"
 
+# shellcheck disable=SC2034  # read by lib/common.sh log helpers
 ACR_CLEANUP_LOG_SCOPE="lock-deployed-images"
 
 lock_usage() {

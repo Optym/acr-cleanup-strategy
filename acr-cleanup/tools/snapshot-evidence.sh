@@ -27,7 +27,6 @@ cp "${work_dir}/result.json" "${work_dir}/report.html" "$out_dir/"
 
 R="${out_dir}/result.json"
 P="${work_dir}/plan.json"
-D="${work_dir}/decisions.jsonl"
 
 gib() { awk -v b="${1:-0}" 'BEGIN { printf "%.1f GiB", b / 1073741824 }'; }
 n() { printf '%s' "$1" | awk '{ printf "%\047d", $1 }'; }

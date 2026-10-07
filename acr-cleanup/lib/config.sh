@@ -159,7 +159,8 @@ _config_apply_override() {
 
 # Fills in per-item defaults so downstream stages never have to test for absent keys.
 _config_normalize() {
-  local work_file="$1" tmp="${work_file}.tmp"
+  local work_file="$1"
+  local tmp="${work_file}.tmp"
   jq '
     def as_entry: if type == "string" then { name: ., reason: "" } else . end;
     def as_pattern: if type == "string" then { pattern: ., reason: "" } else . end;
