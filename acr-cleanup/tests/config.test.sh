@@ -213,11 +213,11 @@ image_cleanup_rules:
 YAML
 )"
 
-echo "config: the shipped MyProduct config"
-if try_config "${MODULE_DIR}/config/myproduct.yaml" >/dev/null 2>&1; then
-  pass "config/myproduct.yaml is valid"
+echo "config: the shipped example config"
+if try_config "${MODULE_DIR}/config/example.yaml" >/dev/null 2>&1; then
+  pass "config/example.yaml is valid"
 else
-  fail_test "config/myproduct.yaml failed validation"
+  fail_test "config/example.yaml failed validation"
 fi
 
 printf '\n%d passed, %d failed\n' "$PASSED" "$FAILED"
