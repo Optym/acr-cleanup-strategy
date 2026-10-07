@@ -1,0 +1,183 @@
+# Template configuration for adopting acr-cleanup in another product.
+# Copy to config/<product>.yaml and edit. See ADOPTION.md for the walkthrough.
+#
+# Regex note: patterns are POSIX Extended Regular Expressions (grep -E).
+# PCRE shorthands such as \d \w \s \b and (?...) silently match nothing here and
+# are rejected at config load. Use [0-9], [A-Za-z0-9_] and so on.
+
+registry:
+  name: <acr-name>
+  resource_group: <resource-group>
+  subscription_id: <subscription-guid>
+  # ADO service connection used for registry access.
+  service_connection: $(azureServiceConnection)
+  # Other hostnames that mean this same registry when seen in a pod spec, for
+  # example a geo-replicated data endpoint or a custom domain. Images referencing
+  # an unlisted hostname are not recognised as protected.
+  host_aliases: []
+  #  - <acr-name>.<region>.data.azurecr.io
+
+# Never cleaned, but always included in the report so you keep visibility of
+# growth you have chosen not to manage.
+never_delete:
+  repositories: []
+  #  - { name: tools/kubectl, reason: "shared tooling image" }
+  tag_patterns:
+    - { pattern: '^latest$',        reason: "floating tag" }
+    - { pattern: '.*-donotdelete$', reason: "manual pin by engineers" }
+
+# The only tags that may ever be deleted.
+#
+# Rules are checked top to bottom and the first match wins, so order matters:
+#   - suffix-style markers (patterns ending in $) belong at the top, otherwise a
+#     broader rule claims them first
+#   - the broadest catch-all belongs at the bottom
+#   - a tag matching no rule is NEVER deleted, which is the safe default
+#
+# always_keep_newest and delete_when_older_than_days are OR'd: a tag survives if
+# it is inside the newest N for its repository OR younger than the age limit.
+# The count is a floor that stops a rarely-built repository from being emptied.
+#
+# example_tags is optional but strongly recommended. At config load each example
+# must match its own rule and must NOT be claimed by an earlier rule, which turns
+# this list into its own regression test. Sample real tags first:
+#   az acr repository show-tags -n <acr> --repository <busiest-repo> \
+#     --detail --orderby time_desc --top 50 --query "[].name" -o tsv
+#
+# If you use GitVersion defaults, check before assuming: `alpha` is the develop
+# branch and `beta` is release/hotfix, which is easy to get backwards.
+image_cleanup_rules:
+  - tag_group: pull_request_builds
+    tag_pattern: '^[0-9]+\.[0-9]+\.[0-9]+-PullRequest[0-9]+\.'
+    delete_when_older_than_days: 7
+    always_keep_newest: 2
+    example_tags:
+      - '1.2.3-PullRequest12345.6'
+
+  - tag_group: develop_builds
+    tag_pattern: '^[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+'
+    delete_when_older_than_days: 45
+    always_keep_newest: 10
+    example_tags:
+      - '1.2.3-alpha.45'
+
+  - tag_group: release_builds
+    tag_pattern: '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+'
+    delete_when_older_than_days: 180
+    always_keep_newest: 10
+    example_tags:
+      - '1.2.3-beta.1-67'
+
+in_use_protection:
+  # Helm revisions retained per release, so a rollback target is never deleted.
+  keep_helm_revisions: 3
+
+  # Untagging is reversible; deleting a manifest is not. This gap is your recovery
+  # window. Set it to span at least two scheduled runs so every item appears in two
+  # published reports first. On a weekly schedule that means 14.
+  #
+  # ACR soft delete is a separate, better recovery net where it is available, but it
+  # does not support geo-replicated or zone-redundant registries. Check with:
+  #   az acr replication list -r <acr> -o table
+  min_untagged_manifest_age_days: 14
+
+  # kubectl          - agents can reach the API server (on-prem, peered VNet, public).
+  #                    Preferred: fast, and read-only.
+  # aks_run_command  - private API server and no agent with line of sight. Requires
+  #                    Microsoft.ContainerService/managedClusters/runcommand/action,
+  #                    which permits arbitrary command execution in any cluster in
+  #                    scope, so grant it per cluster rather than per subscription.
+  cluster_access_mode: kubectl
+
+  # Reporting only: warns about clusters present in your subscriptions but missing
+  # from the list below. It can never block a run.
+  report_unlisted_clusters: true
+
+  # How many Helm releases are read concurrently. This phase dominates discovery:
+  # it is one manifest read per release per retained revision. All reads are
+  # read-only, so this only affects speed. Lower it if your API server throttles.
+  helm_parallelism: 6
+
+  # Off by default. Turn this on only if a single build produces one shared tag
+  # across multiple independently-toggled modules/services (e.g. a monorepo that
+  # stamps the same version on every image regardless of which ones a given
+  # customer's release actually deploys). When on, a tag protected anywhere (by
+  # live pod or Helm history) is protected in EVERY repository that has a tag of
+  # the same name, not only the repositories that currently render it - trading
+  # slower cleanup of a dormant module's images for safety against enabling that
+  # module later on an already-pinned, otherwise-cleaned-up version.
+  protect_tag_across_repositories: false
+
+  # List EVERY cluster that pulls from this registry. A missing cluster means its
+  # running images are invisible to the protection set.
+  #
+  # required: true  -> an unreachable cluster aborts the run before any mutation
+  # required: false -> warns instead, for test clusters that may be stopped
+  #
+  # subscription_id is optional. In the pipeline each cluster job already runs under
+  # its own service connection, but setting it lets the script switch context itself
+  # when several clusters are processed in one run, such as a local dry run.
+  clusters:
+    - name: <aks-cluster>
+      resource_group: <cluster-resource-group>
+      service_connection: <service-connection-for-that-subscription>
+      subscription_id: <subscription-guid>
+      required: true
+
+image_lock:
+  # Read only by deploy/lock-deployed-images.sh, at release time.
+  # Set enabled: false if you do not want a deploy-time lock at all.
+  lock_at_deploy:
+    enabled: true
+    # Matched against the release environment name, case-insensitive substring.
+    # exclude wins over include.
+    environments:
+      include: [ "PROD" ]
+      exclude: []
+
+  # Read only by lib/lock-reconcile.sh, during the cleanup run. Needs no knowledge
+  # of environments: "not running anywhere and not a retained Helm revision" is the
+  # same question regardless of which environment locked the image.
+  #
+  # The two enabled flags are independent:
+  #   true  / true   default, self-healing
+  #   true  / false  lock-only: locks accumulate forever. Migration or observation only
+  #   false / true   unlock-only: drains a historical lock backlog without adding new locks
+  #   false / false  no lock layer; existing locks are still reported
+  unlock_when_unused:
+    enabled: true
+    # A tag must have been out of the protection set this long before it is
+    # unlocked. Guarantees an unlock appears in a report before the image can be
+    # deleted in a later run.
+    wait_days_before_unlocking: 14
+    never_unlock:
+      repositories: []
+      tag_patterns:
+        - { pattern: '.*-donotdelete$', reason: "manual pin by engineers" }
+
+run_settings:
+  # Plan and report, mutate nothing. Keep true until two reports look right.
+  dry_run: true
+  # In-flight ACR calls. Lower it if you see HTTP 429 in the log.
+  parallel_delete_workers: 24
+  # Pipeline jobs the repositories are split across for the read phase.
+  # Bounded by your agent pool size.
+  parallel_repo_jobs: 6
+  # Per-repository concurrency for the one extra lookup every OCI index /
+  # manifest list needs during inventory. A registry whose builds all produce
+  # an index (buildx with the docker-container driver) has thousands per
+  # repository; at 1 that phase takes 20+ minutes per repository. Lower on 429.
+  parallel_reference_lookups: 8
+  # Circuit breaker: the run refuses to delete more than this. There is no approval
+  # gate, so this is the ceiling on the blast radius of a bad rule. It also lets an
+  # initial backlog be drained in controlled chunks.
+  max_deletions_per_run: 20000
+
+email_report:
+  enabled: false
+  # Name of the pipeline variable / variable group secret holding the SendGrid key.
+  # The key itself is never stored in this file and never logged.
+  api_key_variable: SENDGRID_API_KEY
+  from: ""
+  to: []
+  attach_json: true
